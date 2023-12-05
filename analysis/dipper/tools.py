@@ -3,6 +3,7 @@
 from math import gamma
 from scipy.special import erf
 import astropy.stats as astro_stats
+import numpy as np
 
 
 def deviation(mag, mag_err):
