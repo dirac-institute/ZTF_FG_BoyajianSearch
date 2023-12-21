@@ -1,105 +1,78 @@
-"""Tools and code to find dippers in ZTF data."""
+"""
+Tools for analysis.
+"""
 
-from math import gamma
-from scipy.special import erf
-import astropy.stats as astro_stats
 import numpy as np
+from astropy.coordinates import SkyCoord
+import astropy.units as u
 
 
-def deviation(mag, mag_err):
-    """Calculate the running deviation of a light curve for outburst or dip detection.
+def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q=None, custom_q=False):
+    """
+    Prepare the light curve for analysis.
     
     Parameters:
     -----------
-    mag (array-like): Magnitude values of the light curve.
-    mag_err (array-like): Magnitude errors of the light curve.
+    time (array-like): Input time values.
+    mag (array-like): Input magnitude values.
+    mag_err (array-like): Input magnitude error values.
+    flag (array-like): Input flag values.
+    band (array-like): Input band values.
+    band_of_study (str): Band to study. Default is 'r' band
+    flag_good (int): Flag value for good detections. Default is 0 (see ZTF documentation)
 
     Returns:
     --------
-    dev (array-like): Deviation values of the light curve.
+    time (array-like): Output time values.
+    mag (array-like): Output magnitude values.
+    mag_err (array-like): Output magnitude error values.
     """
-    # Calculate biweight estimators
-    R, S = astro_stats.biweight_location(mag), astro_stats.biweight_scale(mag)
-
-    return (mag - R) / np.sqrt(mag_err**2 + S**2)
     
+    if custom_q:
+        rmv = q
+    else:
+        # Selection and preparation of the light curve (default selection on )
+        rmv = (flag == flag_good) & (band==band_of_study')
+    
+    # TODO: I'm working with the numpy values because we had some unexpected issues. Check if stable.
+    time, mag, mag_err = time[rmv].values, mag[rmv].values, mag_err[rmv].values
+    
+    # sort time
+    srt = np.argsort(time)
 
+    return time[srt], mag[srt], mag_err[srt]
 
-def assymetry_yso_M(mag):
-    """Calculate the magnitude assymetry score defined by Hillenbrand et al. 2022 (https://iopscience.iop.org/article/10.3847/1538-3881/ac62d8/pdf).
-
-    Described in the paper: 
-    Objects that have M values <0 are predominately brightening,
-    objects with M values >0 are predominantly dimming, and
-    objects with M values near 0 have symmetric light curves.
+def estimate_gaiadr3_density(ra_target, dec_target, radius=0.01667, gaia_lite_table=tbl):
+    """
+    Estimate the density of stars in the Gaia DR3 catalog around a given target.
 
     Parameters:
     -----------
-    mag (array-like): Magnitude values of the light curve.
-    
-    Returns:
-    --------
-    assymetry (float): Assymetry score.
-    """
-    mag_decile = np.percentile(mag, 10)
-
-    return (mag_decile - np.nanmedian(mag))/np.nanstd(mag)
-
-
-def ggd(x, mu, alpha, beta, ofs, amp):
-    """
-    Generalized Gaussian Distribution modified with an offset term and amplitude to fit the light curves.
-    
-    Parameters:
-    -----------
-    x (array-like): Input time values.
-    mu (float): Mean of the distribution.
-    alpha (float): Scale parameter.
-    beta (float): Shape parameter.
-    ofs (float): Offset term.
-    amp (float): Amplitude term.
+    ra_target (float): Right ascension of the target in degrees.
+    dec_target (float): Declination of the target in degrees.
+    radius (float): Radius of the cone search in degrees. Default is 1 arcmin (1arcmin ~0.01667 deg).
+    gaia_lite_table (LSDB hipscat table): Gaia DR3 table. Default is the one loaded in the notebook.
 
     Returns:
     --------
-    y (array-like): Output magnitude values.
+    closest_star_arcsec (float): Separation in arcseconds of the closest star.
+    closest_star_mag (float): Magnitude of the closest star.
+    density_arcsec2 (float): Density of stars in arcsec^-2.
     """
 
-    term_1 = beta/(2*alpha*gamma(1/beta))
-    abs_term = ((abs(x-mu))/alpha)**beta
-    return amp * term_1 * np.exp(-abs_term) + ofs
+    sky_table = gaia_lite_table.cone_search(ra=ra_target, dec=dec_target, radius=radius).compute()
+    sky = SkyCoord(ra=sky_table['ra'].values*u.deg, dec=sky_table['dec'].values*u.deg, frame='icrs')
+    sky_target = SkyCoord(ra=ra_target*u.deg, dec=dec_target*u.deg, frame='icrs') # sky coord of object of interest
+
+    delta_sep = sky.separation(sky_target).to(u.arcsec).value # separation in arcseconds
+
+    return {"closest_star_arcsec": np.min(delta_sep),
+        "closest_star_mag": sky_table['phot_g_mean_mag'][np.argmin(delta_sep)], 
+        "density_arcsec2": len(delta_sep)/np.pi/radius**2}
 
 
-def depth(m1, mode='min'): 
-    """
-    Normalized magnitude depth on the minimum magnitude.
-    
-    Parameters:
-    ----------
-    m1 (array-like): Magnitude values of the light curve.
-
-    Returns:
-    --------
-    depth (array-like): Depth values of the light curve.
-    """
-    return 10**((m1.min() - m1) / 2.5)
 
 
-def skew_norm(x, mu, sigma, alpha, ofs, amp):
-    """
-    Skew-normal distribution modified with an offset term and amplitude to fit the light curves.
-    
-    Parameters:
-    -----------
-    x (array-like): Input time values.
-    mu (float): Mean of the distribution.
-    sigma (float): Standard deviation of the distribution.
-    alpha (float): Shape parameter controlling the skewness of the distribution.
-    ofs (float): Offset term.
 
-    Returns:
-    --------
-    y (array-like): Output magnitude values.
-    """
-    gaus = 1/np.sqrt(2*np.pi) * np.exp(-(x-mu)**2/sigma**2)
-    FI = 0.5 * (1 + erf(alpha*(x-mu)/np.sqrt(2)))
-    return ofs + amp*2*gaus*FI
+
+

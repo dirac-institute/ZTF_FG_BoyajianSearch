@@ -321,3 +321,4 @@ def peak_detector(times, dips, power_thresh=3, peak_close_rmv=15, pk_2_pk_cut=30
         i+=1
     
     return N_peaks, dip_summary
+
