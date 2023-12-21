@@ -247,7 +247,7 @@ def evaluate_dip(gp_model, x0, y0, yerr0, R, S, diagnostic=False):
               "left_error": integral_left[1],
               "right_error": integral_right[1], 
               "log_sum_error": np.log10(sum(_gpy/_gpyerr2**2)), 
-              "chi-square": gp_info['chi-square']"}
+              "chi-square": gp_info['chi-square']}
     
     if diagnostic:
         #### Diagnotstics for fitting ####
@@ -270,6 +270,22 @@ def evaluate_dip(gp_model, x0, y0, yerr0, R, S, diagnostic=False):
     return summary
 
 def peak_detector(times, dips, power_thresh=3, peak_close_rmv=15, pk_2_pk_cut=30):
+    """
+    Run and compute dip detection algorithm on a light curve.
+    
+    Parameters:
+    -----------
+    times (array-like): Time values of the light curve.
+    dips (array-like): Deviation values of the light curve.
+    power_thresh (float): Threshold for the peak detection. Default is 3.
+    peak_close_rmv (float): Tolerance for removing peaks that are too close to each other. Default is 15.
+    pk_2_pk_cut (float): Minimum peak to peak separation. Default is 30 days.
+
+    Returns:
+    --------
+    N_peaks (int): Number of peaks detected.
+    dip_summary (dict): Summary of the dip. Including the peak location, the window start and end, the number of 1 sigma detections in the dip, the number of detections in the dip, the forward and backward duration of the dip, and the dip power.
+    """
     
     # Smooth the deviation dips with a savgol filter
     yht = savgol_filter(dips, 11, 8) # TODO: is this reccomended?

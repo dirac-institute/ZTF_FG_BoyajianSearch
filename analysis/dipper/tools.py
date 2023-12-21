@@ -32,7 +32,7 @@ def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q
         rmv = q
     else:
         # Selection and preparation of the light curve (default selection on )
-        rmv = (flag == flag_good) & (band==band_of_study')
+        rmv = (flag == flag_good) & (band==band_of_study)
     
     # TODO: I'm working with the numpy values because we had some unexpected issues. Check if stable.
     time, mag, mag_err = time[rmv].values, mag[rmv].values, mag_err[rmv].values
@@ -42,7 +42,7 @@ def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q
 
     return time[srt], mag[srt], mag_err[srt]
 
-def estimate_gaiadr3_density(ra_target, dec_target, radius=0.01667, gaia_lite_table=tbl):
+def estimate_gaiadr3_density(ra_target, dec_target, gaia_lite_table, radius=0.01667):
     """
     Estimate the density of stars in the Gaia DR3 catalog around a given target.
 
@@ -61,13 +61,20 @@ def estimate_gaiadr3_density(ra_target, dec_target, radius=0.01667, gaia_lite_ta
     """
 
     sky_table = gaia_lite_table.cone_search(ra=ra_target, dec=dec_target, radius=radius).compute()
+    assert len(sky_table) > 0, "No stars found in the Gaia DR3 catalog around the target."
+
     sky = SkyCoord(ra=sky_table['ra'].values*u.deg, dec=sky_table['dec'].values*u.deg, frame='icrs')
     sky_target = SkyCoord(ra=ra_target*u.deg, dec=dec_target*u.deg, frame='icrs') # sky coord of object of interest
 
     delta_sep = sky.separation(sky_target).to(u.arcsec).value # separation in arcseconds
 
-    return {"closest_star_arcsec": np.min(delta_sep),
-        "closest_star_mag": sky_table['phot_g_mean_mag'][np.argmin(delta_sep)], 
+    # Find the separation to the cloest star.
+    sep_sorted = np.argsort(delta_sep)
+
+    return {"closest_bright_star_arcsec": delta_sep[np.argmax(sky_table['phot_g_mean_mag'].values)],
+        "closest_bright_star_mag": sky_table['phot_g_mean_mag'].values[np.argmin(sky_table['phot_g_mean_mag'].values)], 
+        "closest_star_arcsec": delta_sep[sep_sorted][0],
+        "closest_star_mag": sky_table['phot_g_mean_mag'].values[sep_sorted][0],
         "density_arcsec2": len(delta_sep)/np.pi/radius**2}
 
 
