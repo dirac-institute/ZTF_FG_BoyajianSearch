@@ -106,10 +106,12 @@ def GaussianProcess_dip(x, y, yerr, alpha=0.5, metric=100):
     
     final_log_L = gp.log_likelihood(y)
     pred, pred_var = gp.predict(y, x_pred, return_var=True)
+    pred_on_data, pred_var_on_data = gp.predict(y, x, return_var=True) # make the GP prediction based on the data..
     
     return x_pred, pred, pred_var, {"init_log_L": init_log_L, 
                                    "final_log_L": final_log_L, 
-                                   "success_status":result['success']}
+                                   "success_status":result['success'], 
+                                   'chi-square': np.sum((y-pred_on_data)**2/yerr**2)}
 
 def calculate_integral(x0, y0, yerr0, R, S):
     """Calculate the integral and integral error of a light curve.
@@ -152,3 +154,101 @@ def calculate_assymetry_score(Int_left, Int_right, Int_err_left, Int_err_right):
     assymetry_score = (Int_left - Int_right) / (np.sqrt(Int_err_left**2 + Int_err_right**2))
     
     return assymetry_score  
+
+def evaluate_dip(gp_model, x0, y0, yerr0, R, S, diagnostic=False):
+    """Evaluate the dip and calculate its significance and error.
+
+    Parameters:
+    -----------
+    gp_model (tuple): Gaussian Process model of the light curve dip.
+    x0 (array-like): Time values of the light curve dip.
+    y0 (array-like): Magnitude values of the light curve dip.
+    yerr0 (array-like): Magnitude errors of the light curve dip.
+    R (float): Biweight location of the light curve (global).
+    S (float): Biweight scale of the light curve (global).
+    diagnostic (bool): If True, plot the diagnostic plots. Default is False.
+
+    Returns:
+    --------
+    summary (dict): Summary of the dip. Including the assymetry score, the left and right integral errors, the log sum error, and the chi-square.
+    """
+    # unpack the Gaussian Process model
+    gpx, gpy, gpyerr, gp_info = gp_model
+    
+    # Find the peak of the GP curve
+    #TODO: should this be the the center found from the dip finder or the GP minimum?
+    loc_gp = gpx[np.argmax(gpy)] # maximum magnitude...
+    
+    # Create an array of the global biweight location
+    M = np.zeros(len(gpy)) + R
+    
+    # Find the indexes where the two functions intersect
+    idx = np.argwhere(np.diff(np.sign(M - gpy))).flatten()
+    
+    #GP model times where they intersect
+    tdx = gpx[idx]
+    tdx_phase = loc_gp - tdx # normalize wrt to peak loc
+    
+    # Select either positive or negative phase of the GP fit
+    w_pos = tdx_phase>0
+    w_neg = tdx_phase<0
+    
+    # Select the edges of the phase
+    try:
+        w_end = min(tdx[w_neg])
+        w_start = max(tdx[w_pos])
+    except:
+        #assert ("Failed to find start or end")
+        return False
+    
+    # Select the GP area of interest
+    sel_gp = np.where((gpx>=w_start) & (gpx<=w_end))
+    
+    # The selected gaussian process curves.... (all dip)
+    _gpx, _gpy, _gpyerr = gpx[sel_gp], gpy[sel_gp], gpyerr[sel_gp]
+    _gpyerr2 = np.sqrt(_gpyerr)
+    
+    gp_left = _gpx <= loc_gp # left side indicies
+    gp_right = _gpx >= loc_gp # right side indicies
+    
+    # left gp 
+    left_gpx, left_gpy, left_gpyerr2 =  _gpx[gp_left], _gpy[gp_left], _gpyerr[gp_left]
+    
+    # right gp
+    right_gpx, right_gpy, right_gpyerr2 =  _gpx[gp_right], _gpy[gp_right], _gpyerr[gp_right]
+    
+    # Calculate left integral
+    integral_left = calculate_integral(left_gpx, left_gpy, left_gpyerr2, R, S)
+    
+    #Calculate right integral
+    integral_right = calculate_integral(right_gpx, right_gpy, right_gpyerr2, R, S)
+    
+    # Calculate assymetry score
+    IScore = calculate_assymetry_score(integral_left[0], integral_right[0], # left right integrals
+                                        integral_left[1], integral_right[1]) # left right integral errors
+
+    summary = {"assymetry_score": IScore, 
+              "left_error": integral_left[1],
+              "right_error": integral_right[1], 
+              "log_sum_error": np.log10(sum(_gpy/_gpyerr2**2)), 
+              "chi-square": gp_info['chi-square']"}
+    
+    if diagnostic:
+        #### Diagnotstics for fitting ####
+        # diagnostic fits
+        plt.figure(figsize=(3,3))
+        plt.axvline(w_start, color='red')
+        plt.axvline(w_end, color='green')
+
+        plt.scatter(gpx[idx], gpy[idx])
+        plt.plot(gpx, gpy)
+        plt.axhline(astro_stats.biweight_location(y0))
+        plt.plot(gpx[sel_gp], gpy[sel_gp])
+        plt.axvline(loc_gp, color='k', ls='--')
+        plt.ylim(plt.ylim()[::-1])
+        plt.errorbar(x0, y0, yerr0, color='k', fmt='.')
+        plt.axhline(np.mean(y0), color='green', lw=2)
+        plt.fill_between(_gpx, _gpy-np.sqrt(_gpyerr), _gpy+np.sqrt(_gpyerr), alpha=0.4)
+        plt.title(f"{summary}, and logsum-err: {np.log10(sum(_gpy/(_gpyerr)))}")
+        
+    return summary
