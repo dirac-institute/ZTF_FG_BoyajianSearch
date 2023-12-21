@@ -2,6 +2,21 @@
 Dipper detection algorithm developed in https://github.com/AndyTza/little-dip
 """
 
+import numpy as np
+from george import kernels
+import george
+from scipy import interpolate
+import astropy.stats as astro_stats
+from scipy.optimize import curve_fit
+from astropy.io import ascii
+from scipy.signal import find_peaks
+import scipy.integrate as integrate
+from scipy.signal import savgol_filter
+
+
+_all_funcs = ["deviation", "calc_dip_edges", "GaussianProcess_dip", "calculate_integral", "calculate_assymetry_score", "evaluate_dip"]
+
+
 def deviation(mag, mag_err):
     """Calculate the running deviation of a light curve for outburst or dip detection.
     
@@ -58,8 +73,9 @@ def calc_dip_edges(xx, yy, _cent, atol=0.2):
     _window_ = (xx>t_back) & (xx<t_forward)
     sel_1_sig = (yy[_window_]>np.median(yy) + 1*np.std(yy)) # detections above 1 sigma
     N_thresh_1 = len((yy[_window_])[sel_1_sig])
-    
-    return t_forward, t_back, t_forward-_cent, _cent-t_back, N_thresh_1
+    N_in_dip = len((yy[_window_]))
+
+    return t_forward, t_back, t_forward-_cent, _cent-t_back, N_thresh_1, N_in_dip
 
 def GaussianProcess_dip(x, y, yerr, alpha=0.5, metric=100):
     """ Perform a Gaussian Process interpolation on the light curve dip.
@@ -252,3 +268,56 @@ def evaluate_dip(gp_model, x0, y0, yerr0, R, S, diagnostic=False):
         plt.title(f"{summary}, and logsum-err: {np.log10(sum(_gpy/(_gpyerr)))}")
         
     return summary
+
+def peak_detector(times, dips, power_thresh=3, peak_close_rmv=15, pk_2_pk_cut=30):
+    
+    # Smooth the deviation dips with a savgol filter
+    yht = savgol_filter(dips, 11, 8) # TODO: is this reccomended?
+    
+    # Scipy peak finding algorithm
+    pks, _ = find_peaks(yht, height=power_thresh, distance=pk_2_pk_cut) #TODO: is 100 days peak separation too aggresive?
+
+    # Reverse sort the peak values
+    pks = np.sort(pks)[::-1]
+    
+    # Time of peaks and dev of peaks
+    t_pks, p_pks = times[pks], dips[pks]
+    
+    # TODO: this section is likely not needed because scipy peak finder is good enough?
+    # If we have more than one peak, remove peaks that are too close to each other?
+    #if len(pks)>1:
+    #    # remove peaks that are too close to each other
+    #    t_pks = np.array([t_pks[i] for i in range(-1, len(t_pks)-1) if ~np.isclose(t_pks[i],
+    #                                                                         t_pks[i+1],
+    #                                                                         atol=peak_close_rmv)]) # 5 day tolerance window...
+
+    #    p_pks = np.array([p_pks[i] for i in range(-1, len(t_pks)-1) if ~np.isclose(t_pks[i],
+    #                                                                        t_pks[i+1],
+    #                                                                        atol=peak_close_rmv)])
+    #    srt = np.argsort(t_pks) # argsort the t_pks
+    #
+    #    t_pks, p_pks = t_pks[srt], p_pks[srt] # rename variables...
+    
+    # Number of peaks
+    N_peaks = len(t_pks)
+    
+
+    dip_summary = {}
+    i = 0
+    for time_ppk, ppk in zip(t_pks, p_pks):
+        _edges = calc_dip_edges(times, dips, time_ppk, atol=0.2)
+        
+        dip_summary[f'dip_{i}'] = {
+            "peak_loc": time_ppk,
+            'window_start': _edges[0],
+            'window_end': _edges[1],
+            "N_1sig_in_dip": _edges[-2], # number of 1 sigma detections in the dip
+            "N_in_dip": _edges[-1], # number of detections in the dip
+            'loc_forward_dur': _edges[2],
+            "loc_backward_dur": _edges[3],
+            "dip_power":ppk
+        }
+                
+        i+=1
+    
+    return N_peaks, dip_summary
