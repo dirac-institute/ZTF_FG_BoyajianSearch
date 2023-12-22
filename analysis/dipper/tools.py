@@ -66,10 +66,11 @@ def estimate_gaiadr3_density(ra_target, dec_target, gaia_lite_table, radius=0.01
     sky = SkyCoord(ra=sky_table['ra'].values*u.deg, dec=sky_table['dec'].values*u.deg, frame='icrs')
     sky_target = SkyCoord(ra=ra_target*u.deg, dec=dec_target*u.deg, frame='icrs') # sky coord of object of interest
 
-    delta_sep = sky.separation(sky_target).to(u.arcsec).value # separation in arcseconds
+    # Find sky separation in arcseconds
+    delta_sep = sky.separation(sky_target).to(u.arcsec).value
 
     # Find the separation to the cloest star.
-    sep_sorted = np.argsort(delta_sep)
+    sep_sorted = np.argsort(delta_sep) 
 
     return {"closest_bright_star_arcsec": delta_sep[np.argmax(sky_table['phot_g_mean_mag'].values)],
         "closest_bright_star_mag": sky_table['phot_g_mean_mag'].values[np.argmin(sky_table['phot_g_mean_mag'].values)], 

@@ -14,7 +14,13 @@ import scipy.integrate as integrate
 from scipy.signal import savgol_filter
 
 
-_all_funcs = ["deviation", "calc_dip_edges", "GaussianProcess_dip", "calculate_integral", "calculate_assymetry_score", "evaluate_dip"]
+_all_funcs = ["deviation", 
+                "calc_dip_edges", 
+                "GaussianProcess_dip", 
+                "calculate_integral",
+                 "calculate_assymetry_score", 
+                 "evaluate_dip", 
+                 "light_curve_ens"]
 
 
 def deviation(mag, mag_err):
@@ -34,6 +40,7 @@ def deviation(mag, mag_err):
     dev (array-like): Deviation values of the light curve.
     """
     # Calculate biweight estimators
+    # TODO: do we need to pass global?
     R, S = astro_stats.biweight_location(mag), astro_stats.biweight_scale(mag)
 
     return (mag - R) / np.sqrt(mag_err**2 + S**2)  
@@ -55,6 +62,7 @@ def calc_dip_edges(xx, yy, _cent, atol=0.2):
     time forward difference (float): Time difference between the forward edge and the center.
     time backward difference (float): Time difference between the backward edge and the center.
     N_thresh_1 (int): Number of detections above the median threshold in the given window.
+    t_in_window (float): Average time difference in the given window.
     """
     
     # select indicies close to the center (positive)
@@ -75,7 +83,10 @@ def calc_dip_edges(xx, yy, _cent, atol=0.2):
     N_thresh_1 = len((yy[_window_])[sel_1_sig])
     N_in_dip = len((yy[_window_]))
 
-    return t_forward, t_back, t_forward-_cent, _cent-t_back, N_thresh_1, N_in_dip
+    # select times inside window and compute the average distance
+    t_in_window = np.mean(np.diff(xx[_window_]))
+
+    return t_forward, t_back, t_forward-_cent, _cent-t_back, N_thresh_1, N_in_dip, t_in_window
 
 def GaussianProcess_dip(x, y, yerr, alpha=0.5, metric=100):
     """ Perform a Gaussian Process interpolation on the light curve dip.
@@ -327,14 +338,18 @@ def peak_detector(times, dips, power_thresh=3, peak_close_rmv=15, pk_2_pk_cut=30
             "peak_loc": time_ppk,
             'window_start': _edges[0],
             'window_end': _edges[1],
-            "N_1sig_in_dip": _edges[-2], # number of 1 sigma detections in the dip
-            "N_in_dip": _edges[-1], # number of detections in the dip
+            "N_1sig_in_dip": _edges[-3], # number of 1 sigma detections in the dip
+            "N_in_dip": _edges[-2], # number of detections in the dip
             'loc_forward_dur': _edges[2],
             "loc_backward_dur": _edges[3],
-            "dip_power":ppk
+            "dip_power":ppk,
+            "average_dt_dif": _edges[-1]
         }
                 
         i+=1
     
     return N_peaks, dip_summary
 
+#def lightcuve_ens():
+#    """light curve ensable method. Pass"""
+#        pass
