@@ -348,7 +348,7 @@ def peak_detector(times, dips, power_thresh=3, peak_close_rmv=15, pk_2_pk_cut=30
     return N_peaks, dip_summary
 
 
-def best_peak_detector(peak_dictionary):
+def best_peak_detector(peak_dictionary, min_in_dip=3):
     """Chose the best peak from the peak detector.
 
         What conditions do we set for the best peak?
@@ -357,19 +357,24 @@ def best_peak_detector(peak_dictionary):
     Parameters:
     -----------
     peak_dictionary (dict): Dictionary of the peaks.
+    min_in_dip (int): Minimum number of detections in the dip. Default is 3 detections.
 
     Returns:
     --------
-
+    pd.DataFrame: Table of the best dip properties.
+    
     """
-
+    # upack
     N_peaks, dict_summary = peak_dictionary
     
-    summary_matrix = np.zeros(shape=(N_peaks, len(dict_summary.keys())+1))
+    summary_matrix = np.zeros(shape=(N_peaks, 9)) # TODO: add more columns to this matrix
     for i, info in enumerate(dict_summary.keys()):
-        
        summary_matrix[i,:] = np.array(list(dict_summary[f'{info}'].values()))
 
+    dip_table = pd.DataFrame(summary_matrix, columns=['peak_loc', 'window_start', 'window_end', 'N_1sig_in_dip', 'N_in_dip', 'loc_forward_dur', 'loc_backward_dur', 'dip_power', 'average_dt_dif'])
+    dip_table_q = dip_table['N_in_dip'] >= min_in_dip # minimum number of detections in the dip
+    dip_table_better = dip_table[dip_table_q]
 
-    return pd.DataFrame(summary_matrix, columns=['peak_loc', 'window_start', 'window_end', 'N_1sig_in_dip', 'N_in_dip', 'loc_forward_dur', 'loc_backward_dur', 'dip_power', 'average_dt_dif'])
+    assert len(dip_table_better) > 0, "No dips found with the minimum number of detections."
 
+    return dip_table_better.iloc[dip_table_better['dip_power'].idxmax()]
