@@ -12,6 +12,7 @@ from astropy.io import ascii
 from scipy.signal import find_peaks
 import scipy.integrate as integrate
 from scipy.signal import savgol_filter
+import pandas as pd
 
 
 _all_funcs = ["deviation", 
@@ -328,10 +329,8 @@ def peak_detector(times, dips, power_thresh=3, peak_close_rmv=15, pk_2_pk_cut=30
     # Number of peaks
     N_peaks = len(t_pks)
     
-
     dip_summary = {}
-    i = 0
-    for time_ppk, ppk in zip(t_pks, p_pks):
+    for i, (time_ppk, ppk) in enumerate(zip(t_pks, p_pks)):
         _edges = calc_dip_edges(times, dips, time_ppk, atol=0.2)
         
         dip_summary[f'dip_{i}'] = {
@@ -346,10 +345,31 @@ def peak_detector(times, dips, power_thresh=3, peak_close_rmv=15, pk_2_pk_cut=30
             "average_dt_dif": _edges[-1]
         }
                 
-        i+=1
-    
     return N_peaks, dip_summary
 
-#def lightcuve_ens():
-#    """light curve ensable method. Pass"""
-#        pass
+
+def best_peak_detector(peak_dictionary):
+    """Chose the best peak from the peak detector.
+
+        What conditions do we set for the best peak?
+        >> Highest power with more number of detections in the dip
+    
+    Parameters:
+    -----------
+    peak_dictionary (dict): Dictionary of the peaks.
+
+    Returns:
+    --------
+
+    """
+
+    N_peaks, dict_summary = peak_dictionary
+    
+    summary_matrix = np.zeros(shape=(N_peaks, len(dict_summary.keys())+1))
+    for i, info in enumerate(dict_summary.keys()):
+        
+       summary_matrix[i,:] = np.array(list(dict_summary[f'{info}'].values()))
+
+
+    return pd.DataFrame(summary_matrix, columns=['peak_loc', 'window_start', 'window_end', 'N_1sig_in_dip', 'N_in_dip', 'loc_forward_dur', 'loc_backward_dur', 'dip_power', 'average_dt_dif'])
+

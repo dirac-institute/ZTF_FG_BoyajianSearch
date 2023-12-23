@@ -9,7 +9,7 @@ import astropy.units as u
 
 def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q=None, custom_q=False):
     """
-    Prepare the light curve for analysis.
+    Prepare the light curve for analysis - specifically for the ZTF data.
     
     Parameters:
     -----------
