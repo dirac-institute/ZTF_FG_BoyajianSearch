@@ -24,7 +24,7 @@ _all_funcs = ["deviation",
                  "light_curve_ens"]
 
 
-def deviation(mag, mag_err):
+def deviation(mag, mag_err, R, S):
     """Calculate the running deviation of a light curve for outburst or dip detection.
     
     d >> 0 will be dimming
@@ -35,15 +35,14 @@ def deviation(mag, mag_err):
     -----------
     mag (array-like): Magnitude values of the light curve.
     mag_err (array-like): Magnitude errors of the light curve.
+    R (float): Biweight location of the light curve (global).
+    S (float): Biweight scale of the light curve (global).
 
     Returns:
     --------
     dev (array-like): Deviation values of the light curve.
     """
     # Calculate biweight estimators
-    # TODO: do we need to pass global?
-    R, S = astro_stats.biweight_location(mag), astro_stats.biweight_scale(mag)
-
     return (mag - R) / np.sqrt(mag_err**2 + S**2)  
 
 def calc_dip_edges(xx, yy, _cent, atol=0.2):
@@ -107,39 +106,46 @@ def GaussianProcess_dip(x, y, yerr, alpha=0.5, metric=100):
     """
     # Standard RationalQuadraticKernel kernel from George
     # TODO: are my alpha and metric values correct?
-    kernel = kernels.RationalQuadraticKernel(log_alpha=alpha, metric=metric)
     
-    # Standard GP proceedure using scipy.minimize the log likelihood (following https://george.readthedocs.io/en/latest/tutorials/)
-    gp = george.GP(kernel)
-    gp.compute(x, yerr)
+    try: # if the GP is failing it's likely an issue with the fitting. TODO: is this the best way to handle this?
+        kernel = kernels.RationalQuadraticKernel(log_alpha=alpha, metric=metric)
+        
+        # Standard GP proceedure using scipy.minimize the log likelihood (following https://george.readthedocs.io/en/latest/tutorials/)
+        gp = george.GP(kernel)
+        gp.compute(x, yerr)
 
-    x_pred = np.linspace(min(x), max(x), 5_000)
-    pred, pred_var = gp.predict(y, x_pred, return_var=True)
-    
-    init_log_L = gp.log_likelihood(y)
-    
-    from scipy.optimize import minimize
+        x_pred = np.linspace(min(x), max(x), 5_000)
+        pred, pred_var = gp.predict(y, x_pred, return_var=True)
+        
+        init_log_L = gp.log_likelihood(y)
+        
+        from scipy.optimize import minimize
 
-    def neg_ln_like(p):
-        gp.set_parameter_vector(p)
-        return -gp.log_likelihood(y)
+        def neg_ln_like(p):
+            gp.set_parameter_vector(p)
+            return -gp.log_likelihood(y)
 
-    def grad_neg_ln_like(p):
-        gp.set_parameter_vector(p)
-        return -gp.grad_log_likelihood(y)
+        def grad_neg_ln_like(p):
+            gp.set_parameter_vector(p)
+            return -gp.grad_log_likelihood(y)
 
-    result = minimize(neg_ln_like, gp.get_parameter_vector(), jac=grad_neg_ln_like)
+        result = minimize(neg_ln_like, gp.get_parameter_vector(), jac=grad_neg_ln_like)
 
-    gp.set_parameter_vector(result.x)
-    
-    final_log_L = gp.log_likelihood(y)
-    pred, pred_var = gp.predict(y, x_pred, return_var=True)
-    pred_on_data, pred_var_on_data = gp.predict(y, x, return_var=True) # make the GP prediction based on the data..
-    
-    return x_pred, pred, pred_var, {"init_log_L": init_log_L, 
-                                   "final_log_L": final_log_L, 
-                                   "success_status":result['success'], 
-                                   'chi-square': np.sum((y-pred_on_data)**2/yerr**2)}
+        gp.set_parameter_vector(result.x)
+        
+        final_log_L = gp.log_likelihood(y)
+        pred, pred_var = gp.predict(y, x_pred, return_var=True)
+        pred_on_data, pred_var_on_data = gp.predict(y, x, return_var=True) # make the GP prediction based on the data..
+        
+        return x_pred, pred, pred_var, {"init_log_L": init_log_L, 
+                                    "final_log_L": final_log_L, 
+                                    "success_status":result['success'], 
+                                    'chi-square': np.sum((y-pred_on_data)**2/yerr**2)}
+    except:
+        return x, y, yerr, {"init_log_L": np.nan, 
+                                    "final_log_L": np.nan, 
+                                    "success_status":False, 
+                                    'chi-square': np.nan}
 
 def calculate_integral(x0, y0, yerr0, R, S):
     """Calculate the integral and integral error of a light curve.
@@ -206,6 +212,7 @@ def evaluate_dip(gp_model, x0, y0, yerr0, R, S, diagnostic=False):
     # Find the peak of the GP curve
     #TODO: should this be the the center found from the dip finder or the GP minimum?
     loc_gp = gpx[np.argmax(gpy)] # maximum magnitude...
+    print (loc_gp)
     
     # Create an array of the global biweight location
     M = np.zeros(len(gpy)) + R
@@ -215,13 +222,17 @@ def evaluate_dip(gp_model, x0, y0, yerr0, R, S, diagnostic=False):
     
     #GP model times where they intersect
     tdx = gpx[idx]
+    print (tdx)
     tdx_phase = loc_gp - tdx # normalize wrt to peak loc
+    print (tdx_phase)
     
     # Select either positive or negative phase of the GP fit
     w_pos = tdx_phase>0
     w_neg = tdx_phase<0
     
     # Select the edges of the phase
+    print (w_pos, w_neg)
+
     try:
         w_end = min(tdx[w_neg])
         w_start = max(tdx[w_pos])
@@ -349,10 +360,7 @@ def peak_detector(times, dips, power_thresh=3, peak_close_rmv=15, pk_2_pk_cut=30
 
 
 def best_peak_detector(peak_dictionary, min_in_dip=3):
-    """Chose the best peak from the peak detector.
-
-        What conditions do we set for the best peak?
-        >> Highest power with more number of detections in the dip
+    """Chose the best peak from the peak detector with a minimum number of detections threshold. 
     
     Parameters:
     -----------
@@ -364,7 +372,7 @@ def best_peak_detector(peak_dictionary, min_in_dip=3):
     pd.DataFrame: Table of the best dip properties.
     
     """
-    # upack
+    # unpack dictionary
     N_peaks, dict_summary = peak_dictionary
     
     summary_matrix = np.zeros(shape=(N_peaks, 9)) # TODO: add more columns to this matrix
@@ -372,6 +380,7 @@ def best_peak_detector(peak_dictionary, min_in_dip=3):
        summary_matrix[i,:] = np.array(list(dict_summary[f'{info}'].values()))
 
     dip_table = pd.DataFrame(summary_matrix, columns=['peak_loc', 'window_start', 'window_end', 'N_1sig_in_dip', 'N_in_dip', 'loc_forward_dur', 'loc_backward_dur', 'dip_power', 'average_dt_dif'])
+    
     dip_table_q = dip_table['N_in_dip'] >= min_in_dip # minimum number of detections in the dip
     dip_table_better = dip_table[dip_table_q]
 

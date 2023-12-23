@@ -1,7 +1,6 @@
 """
 Tools for analysis.
 """
-
 import numpy as np
 from astropy.coordinates import SkyCoord
 import astropy.units as u
@@ -41,6 +40,32 @@ def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q
     srt = np.argsort(time)
 
     return time[srt], mag[srt], mag_err[srt]
+
+def digest_the_peak(peak_dict, time, mag, mag_err, expandby=10):
+    """Given the peak dictionary and data - prepare my light curve for GP analysis and integration.
+    
+    Parameters:
+    -----------
+    peak_dict (dict): Dictionary of the peak.
+    time (array-like): Input time values.
+    mag (array-like): Input magnitude values.
+    mag_err (array-like): Input magnitude error values.
+    expandby (float): Number of days to expand the window by. Default is 10 days.
+
+    Returns:
+    --------
+    time (array-like): Output time values.
+    mag (array-like): Output magnitude values.
+    mag_err (array-like): Output magnitude error values.
+    """
+
+    # Define starting pontnts
+    start, end = peak_dict['window_start'], peak_dict['window_end']
+
+    # select
+    selection = np.where((time > start-expandby) & (time < end+expandby) & (~np.isnan(time)) & (~np.isnan(mag)) & (~np.isnan(mag_err)))
+    
+    return time[selection], mag[selection], mag_err[selection]
 
 def estimate_gaiadr3_density(ra_target, dec_target, gaia_lite_table, radius=0.01667):
     """
