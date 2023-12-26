@@ -41,7 +41,7 @@ def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q
 
     return time[srt], mag[srt], mag_err[srt]
 
-def digest_the_peak(peak_dict, time, mag, mag_err, expandby=10):
+def digest_the_peak(peak_dict, time, mag, mag_err, expandby=5):
     """Given the peak dictionary and data - prepare my light curve for GP analysis and integration.
     
     Parameters:
@@ -63,8 +63,8 @@ def digest_the_peak(peak_dict, time, mag, mag_err, expandby=10):
     start, end = peak_dict['window_start'], peak_dict['window_end']
 
     # select
-    selection = np.where((time > start-expandby) & (time < end+expandby) & (~np.isnan(time)) & (~np.isnan(mag)) & (~np.isnan(mag_err)))
-    
+    selection = np.where((time > end-expandby) & (time < start+expandby) & (~np.isnan(time)) & (~np.isnan(mag)) & (~np.isnan(mag_err)))
+
     return time[selection], mag[selection], mag_err[selection]
 
 def estimate_gaiadr3_density(ra_target, dec_target, gaia_lite_table, radius=0.01667):

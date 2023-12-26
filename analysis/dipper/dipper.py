@@ -13,6 +13,7 @@ from scipy.signal import find_peaks
 import scipy.integrate as integrate
 from scipy.signal import savgol_filter
 import pandas as pd
+import matplotlib.pyplot as plt
 
 
 _all_funcs = ["deviation", 
@@ -107,45 +108,45 @@ def GaussianProcess_dip(x, y, yerr, alpha=0.5, metric=100):
     # Standard RationalQuadraticKernel kernel from George
     # TODO: are my alpha and metric values correct?
     
-    try: # if the GP is failing it's likely an issue with the fitting. TODO: is this the best way to handle this?
-        kernel = kernels.RationalQuadraticKernel(log_alpha=alpha, metric=metric)
-        
-        # Standard GP proceedure using scipy.minimize the log likelihood (following https://george.readthedocs.io/en/latest/tutorials/)
-        gp = george.GP(kernel)
-        gp.compute(x, yerr)
+    #try: # if the GP is failing it's likely an issue with the fitting. TODO: is this the best way to handle this?
+    kernel = kernels.RationalQuadraticKernel(log_alpha=alpha, metric=metric)
+    
+    # Standard GP proceedure using scipy.minimize the log likelihood (following https://george.readthedocs.io/en/latest/tutorials/)
+    gp = george.GP(kernel)
+    gp.compute(x, yerr)
+    x_pred = np.linspace(min(x), max(x), 5_000)
+    pred, pred_var = gp.predict(y, x_pred, return_var=True)
+    
+    init_log_L = gp.log_likelihood(y)
+    
+    from scipy.optimize import minimize
 
-        x_pred = np.linspace(min(x), max(x), 5_000)
-        pred, pred_var = gp.predict(y, x_pred, return_var=True)
-        
-        init_log_L = gp.log_likelihood(y)
-        
-        from scipy.optimize import minimize
+    def neg_ln_like(p):
+        gp.set_parameter_vector(p)
+        return -gp.log_likelihood(y)
 
-        def neg_ln_like(p):
-            gp.set_parameter_vector(p)
-            return -gp.log_likelihood(y)
+    def grad_neg_ln_like(p):
+        gp.set_parameter_vector(p)
+        return -gp.grad_log_likelihood(y)
 
-        def grad_neg_ln_like(p):
-            gp.set_parameter_vector(p)
-            return -gp.grad_log_likelihood(y)
+    result = minimize(neg_ln_like, gp.get_parameter_vector(), jac=grad_neg_ln_like)
 
-        result = minimize(neg_ln_like, gp.get_parameter_vector(), jac=grad_neg_ln_like)
-
-        gp.set_parameter_vector(result.x)
-        
-        final_log_L = gp.log_likelihood(y)
-        pred, pred_var = gp.predict(y, x_pred, return_var=True)
-        pred_on_data, pred_var_on_data = gp.predict(y, x, return_var=True) # make the GP prediction based on the data..
-        
-        return x_pred, pred, pred_var, {"init_log_L": init_log_L, 
-                                    "final_log_L": final_log_L, 
-                                    "success_status":result['success'], 
-                                    'chi-square': np.sum((y-pred_on_data)**2/yerr**2)}
-    except:
-        return x, y, yerr, {"init_log_L": np.nan, 
-                                    "final_log_L": np.nan, 
-                                    "success_status":False, 
-                                    'chi-square': np.nan}
+    gp.set_parameter_vector(result.x)
+    
+    final_log_L = gp.log_likelihood(y)
+    pred, pred_var = gp.predict(y, x_pred, return_var=True)
+    pred_on_data, pred_var_on_data = gp.predict(y, x, return_var=True) # make the GP prediction based on the data..
+    
+    return x_pred, pred, pred_var, {"init_log_L": init_log_L, 
+                                "final_log_L": final_log_L, 
+                                "success_status":result['success'], 
+                                'chi-square': np.sum((y-pred_on_data)**2/yerr**2)}
+    #except:
+        #print ("GP failed!")
+        #return x, y, yerr, {"init_log_L": np.nan, 
+                                    #"final_log_L": np.nan, 
+                                    #"success_status":False, 
+                                    #'chi-square': np.nan}
 
 def calculate_integral(x0, y0, yerr0, R, S):
     """Calculate the integral and integral error of a light curve.
@@ -189,7 +190,7 @@ def calculate_assymetry_score(Int_left, Int_right, Int_err_left, Int_err_right):
     
     return assymetry_score  
 
-def evaluate_dip(gp_model, x0, y0, yerr0, R, S, diagnostic=False):
+def evaluate_dip(gp_model, x0, y0, yerr0, R, S, glob_M, peak_loc, diagnostic=False):
     """Evaluate the dip and calculate its significance and error.
 
     Parameters:
@@ -199,8 +200,10 @@ def evaluate_dip(gp_model, x0, y0, yerr0, R, S, diagnostic=False):
     y0 (array-like): Magnitude values of the light curve dip.
     yerr0 (array-like): Magnitude errors of the light curve dip.
     R (float): Biweight location of the light curve (global).
+    glob_M (float): Global median
     S (float): Biweight scale of the light curve (global).
     diagnostic (bool): If True, plot the diagnostic plots. Default is False.
+    peak_loc (float): Location of the peak of the light curve dip.
 
     Returns:
     --------
@@ -208,37 +211,41 @@ def evaluate_dip(gp_model, x0, y0, yerr0, R, S, diagnostic=False):
     """
     # unpack the Gaussian Process model
     gpx, gpy, gpyerr, gp_info = gp_model
+
+
+    # TODO: we're facing some issues with the true isolation of the dip. Hence the scores are off depending on the window of our function. 
+    # TODO: Try to figure out a method for a more robust isolation of the dip.
     
     # Find the peak of the GP curve
-    #TODO: should this be the the center found from the dip finder or the GP minimum?
-    loc_gp = gpx[np.argmax(gpy)] # maximum magnitude...
-    print (loc_gp)
-    
-    # Create an array of the global biweight location
-    M = np.zeros(len(gpy)) + R
-    
-    # Find the indexes where the two functions intersect
-    idx = np.argwhere(np.diff(np.sign(M - gpy))).flatten()
-    
-    #GP model times where they intersect
-    tdx = gpx[idx]
-    print (tdx)
-    tdx_phase = loc_gp - tdx # normalize wrt to peak loc
-    print (tdx_phase)
-    
-    # Select either positive or negative phase of the GP fit
-    w_pos = tdx_phase>0
-    w_neg = tdx_phase<0
-    
-    # Select the edges of the phase
-    print (w_pos, w_neg)
+    #TODO: GP peak is causing issues withthe phase. Let keep it at the centroid of the window finder.
+    #loc_gp = peak_loc # maximum magnitude...
 
+    #TODO alternative peak finder
+    loc_gp = gpx[np.argmax(gpy)] # maximum magnitude...
+    
+    # Let's try to find the edges of the dip using the GP fit...
     try:
+        # Create an array of the global biweight location
+        M = np.zeros(len(gpy)) + glob_M # TODO: is global median the best choice here?
+
+        # Find the indexes where the two functions intersect
+        #TODO: this featue is struggling to find the edges of the dip
+        idx = np.argwhere(np.diff(np.sign(M - gpy))).flatten()
+        
+        #GP model times where they intersect
+        tdx = gpx[idx]
+        tdx_phase = loc_gp - tdx # normalize wrt to peak loc
+        
+        # Select either positive or negative phase of the GP fit
+        w_pos = tdx_phase>0
+        w_neg = tdx_phase<0
+
         w_end = min(tdx[w_neg])
         w_start = max(tdx[w_pos])
     except:
-        #assert ("Failed to find start or end")
-        return False
+        # If the GP is failing, let's use the edges from the dip finder...
+        find = calc_dip_edges(x0, y0, peak_loc, atol=0.2)
+        w_start, w_end = find[0], find[1]
     
     # Select the GP area of interest
     sel_gp = np.where((gpx>=w_start) & (gpx<=w_end))
@@ -261,10 +268,11 @@ def evaluate_dip(gp_model, x0, y0, yerr0, R, S, diagnostic=False):
     
     #Calculate right integral
     integral_right = calculate_integral(right_gpx, right_gpy, right_gpyerr2, R, S)
-    
+
     # Calculate assymetry score
     IScore = calculate_assymetry_score(integral_left[0], integral_right[0], # left right integrals
                                         integral_left[1], integral_right[1]) # left right integral errors
+
 
     summary = {"assymetry_score": IScore, 
               "left_error": integral_left[1],
@@ -359,7 +367,7 @@ def peak_detector(times, dips, power_thresh=3, peak_close_rmv=15, pk_2_pk_cut=30
     return N_peaks, dip_summary
 
 
-def best_peak_detector(peak_dictionary, min_in_dip=3):
+def best_peak_detector(peak_dictionary, min_in_dip=1):
     """Chose the best peak from the peak detector with a minimum number of detections threshold. 
     
     Parameters:
@@ -380,10 +388,11 @@ def best_peak_detector(peak_dictionary, min_in_dip=3):
        summary_matrix[i,:] = np.array(list(dict_summary[f'{info}'].values()))
 
     dip_table = pd.DataFrame(summary_matrix, columns=['peak_loc', 'window_start', 'window_end', 'N_1sig_in_dip', 'N_in_dip', 'loc_forward_dur', 'loc_backward_dur', 'dip_power', 'average_dt_dif'])
-    
-    dip_table_q = dip_table['N_in_dip'] >= min_in_dip # minimum number of detections in the dip
-    dip_table_better = dip_table[dip_table_q]
 
-    assert len(dip_table_better) > 0, "No dips found with the minimum number of detections."
+    dip_table_q = dip_table['N_in_dip'] >= min_in_dip # must contain at least one detection at the bottom
 
-    return dip_table_better.iloc[dip_table_better['dip_power'].idxmax()]
+    if len(dip_table_q) == 0:
+        print ("No dip is found within the minimum number of detections.")
+        return None
+
+    return dip_table.iloc[dip_table[dip_table_q]['dip_power'].idxmax()]

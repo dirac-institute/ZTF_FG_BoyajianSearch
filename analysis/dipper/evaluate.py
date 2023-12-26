@@ -2,10 +2,10 @@ from dipper import *
 from tools import *
 import astropy.stats as astro_stats
 
-def evaluate(time, mag, mag_err, flag, band, custom_cols):
+def evaluate(time, mag, mag_err, flag, band, ra, dec, gaia_lite, custom_cols):
 
     # Summary information
-    summary = {}
+    summary_ = {}
     
     # Digest my light curve. Select band, good detections & sort
     time, mag, mag_err = prepare_lc(time, mag, mag_err, flag, band,  band_of_study='r', flag_good=0, q=None, custom_q=False)
@@ -23,7 +23,8 @@ def evaluate(time, mag, mag_err, flag, band, custom_cols):
     bp = best_peak_detector(peak_detections, min_in_dip=3)
 
     # If no peaks found...
-    if peak_detections[0]==0:
+    if peak_detections[0]==0 or bp is None:
+        print ("No peaks found!")
         summary_['biweight_scale'] = S
         summary_['frac_above_2_sigma'] = len(running_deviation[running_deviation>np.mean(running_deviation)+2*np.std(running_deviation)])/len(running_deviation)
         summary_['Ndips'] = peak_detections[0] # number of peaks
@@ -42,35 +43,58 @@ def evaluate(time, mag, mag_err, flag, band, custom_cols):
         summary_['density_arcsec2'] = np.nan
     else: # ready for a GP...
         # prepare the dip for the GP analysis...
-        x, y, yerr = digest_the_peak(bp, time, mag, mag_err, expandby=10)
+        x, y, yerr = digest_the_peak(bp, time, mag, mag_err, expandby=35)
 
-        assert len(x)>0, "The dip is empty!"
-        
         # feed to the GP
         gp = GaussianProcess_dip(x, y, yerr, alpha=0.5, metric=100)
 
         # GP assesment of quality 
-        gp_quality = evaluate_dip(gp, x, y, yerr, R, S, diagnostic=False)
+        gp_quality = evaluate_dip(gp, x, y, yerr, R, S, bp['peak_loc'], diagnostic=False)
 
-        summary_['biweight_scale'] = S
-        summary_['frac_above_2_sigma'] = len(running_deviation[running_deviation>np.mean(running_deviation)+2*np.std(running_deviation)])/len(running_deviation)
-        summary_['Ndips'] = peak_detections[0] # number of peaks
-        summary_['best_dip_power'] = bp['dip_power']
-        summary_['best_dip_time_loc'] = bp['peak_loc']
-        summary_['best_dip_start'] = bp['window_start']
-        summary_['best_dip_end'] = bp['window_end']
-        summary_['best_dip_dt'] = bp['average_dt_dif']
-        summary_['best_dip_ndet'] = bp['N_in_dip']
-        summary_['best_dip_integral_score'] = np.nan
-        summary_['chi-square-gp'] = np.nan
-        summary_['closest_bright_star_arcsec'] = np.nan
-        summary_['closest_bright_star_mag'] = np.nan
-        summary_['closest_star_arcsec'] = np.nan
-        summary_['closest_star_mag'] = np.nan
-        summary_['density_arcsec2'] = np.nan
+        print (gp_quality)
 
+        if gp_quality is not None:
+            summary_['biweight_scale'] = S
+            summary_['frac_above_2_sigma'] = len(running_deviation[running_deviation>np.mean(running_deviation)+2*np.std(running_deviation)])/len(running_deviation)
+            summary_['Ndips'] = peak_detections[0] # number of peaks
+            summary_['best_dip_power'] = bp['dip_power']
+            summary_['best_dip_time_loc'] = bp['peak_loc']
+            summary_['best_dip_start'] = bp['window_start']
+            summary_['best_dip_end'] = bp['window_end']
+            summary_['best_dip_dt'] = bp['average_dt_dif']
+            summary_['best_dip_ndet'] = bp['N_in_dip']
+            summary_['best_dip_integral_score'] = gp_quality['assymetry_score']
+            summary_['chi-square-gp'] = gp_quality['chi-square']
 
-    return pd.Series(list(summary_.values()), index=custom_cols)
+            # evaluate Gaia close star statistics
+            _ra, _dec = np.median(ra), np.median(dec)
+            gaia_info = estimate_gaiadr3_density(_ra, _dec, gaia_lite, radius=0.01667)
+
+            summary_['closest_bright_star_arcsec'] = gaia_info['closest_bright_star_arcsec']
+            summary_['closest_bright_star_mag'] = gaia_info['closest_bright_star_mag']
+            summary_['closest_star_arcsec'] = gaia_info['closest_star_arcsec']
+            summary_['closest_star_mag'] = gaia_info['closest_star_mag']
+            summary_['density_arcsec2'] = gaia_info['density_arcsec2']
+
+            return pd.Series(list(summary_.values()), index=custom_cols)
+        else:
+            print ("No peaks found!")
+            summary_['biweight_scale'] = S
+            summary_['frac_above_2_sigma'] = len(running_deviation[running_deviation>np.mean(running_deviation)+2*np.std(running_deviation)])/len(running_deviation)
+            summary_['Ndips'] = peak_detections[0] # number of peaks
+            summary_['best_dip_power'] = np.nan
+            summary_['best_dip_time'] = np.nan
+            summary_['best_dip_start'] = np.nan
+            summary_['best_dip_end'] = np.nan
+            summary_['best_dip_dt'] = np.nan
+            summary_['best_dip_ndet'] = np.nan
+            summary_['best_dip_integral_score'] = np.nan
+            summary_['chi-square-gp'] = np.nan
+            summary_['closest_bright_star_arcsec'] = np.nan
+            summary_['closest_bright_star_mag'] = np.nan
+            summary_['closest_star_arcsec'] = np.nan
+            summary_['closest_star_mag'] = np.nan
+            summary_['density_arcsec2'] = np.nan
 
 
 
