@@ -2,9 +2,13 @@
 Dipper detection algorithm developed in https://github.com/AndyTza/little-dip
 """
 
+
 import numpy as np
+#Gaussian process modules
 from george import kernels
 import george
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process.kernels import RBF, ExpSineSquared 
 from scipy import interpolate
 import astropy.stats as astro_stats
 from scipy.optimize import curve_fit
@@ -89,8 +93,49 @@ def calc_dip_edges(xx, yy, _cent, atol=0.2):
 
     return t_forward, t_back, t_forward-_cent, _cent-t_back, N_thresh_1, N_in_dip, t_in_window
 
-def GaussianProcess_dip(x, y, yerr, alpha=0.5, metric=100):
-    """ Perform a Gaussian Process interpolation on the light curve dip.
+
+def GaussianProcess_dip(x, y, yerr, length_scale=0.01):
+    """Perform a Gaussian Process interpolation on the light curve dip.
+    
+    Parameters:
+    -----------
+    x (array-like): Time values of the light curve.
+    y (array-like): Magnitude values of the light curve.
+    yerr (array-like): Magnitude errors of the light curve.
+    length_scale (float): Length scale of the Gaussian Process kernel. Default is 0.01.
+
+    Returns:
+    --------
+    x_pred (array-like): Time values of the interpolated light curve.
+    pred (array-like): Magnitude values of the interpolated light curve.
+    pred_var (array-like): Magnitude variance of the interpolated light curve. (multiply by 1.96 for 1-sigma)
+    summary dictionary (dict): Summary of the GP interpolation. Including initial and final log likelihoods, and the success status. TODO: femove features.
+    """
+    kernel = 1 * RBF(length_scale=length_scale, length_scale_bounds=(1e-2, 1e3)) + ExpSineSquared(length_scale=0.5,
+    periodicity=0,
+    length_scale_bounds=(1e-05, 100000.0),
+    periodicity_bounds=(1e100, 1e200),) #TODO: these priors and and bounds work with current examples...
+    
+    noise_std = yerr
+    gaussian_process = GaussianProcessRegressor(
+    kernel=kernel, alpha=noise_std**2, n_restarts_optimizer=100)
+
+    gaussian_process.fit(x.reshape(-1, 1), y)
+
+    X = np.linspace(min(x), max(x), 2_000)
+
+    # predict my work 
+    mean_prediction, std_prediction = gaussian_process.predict(X.reshape(-1, 1), return_std=True)
+    
+    mean_prediction_dat, _ = gaussian_process.predict(x.reshape(-1, 1), return_std=True)
+        
+    return X.ravel(), mean_prediction, std_prediction, {"init_log_L": 0, 
+                                "final_log_L": 0, 
+                                "success_status": True, 
+                                'chi-square': np.sum((y-mean_prediction_dat)**2/yerr**2)}
+
+def GaussianProcess_dip_old(x, y, yerr, alpha=0.5, metric=100):
+    """ (DEPRICATED)Perform a Gaussian Process interpolation on the light curve dip.
 
     Parameters:
     -----------
@@ -107,10 +152,13 @@ def GaussianProcess_dip(x, y, yerr, alpha=0.5, metric=100):
     """
     # Standard RationalQuadraticKernel kernel from George
     # TODO: are my alpha and metric values correct?
+
+    #TODO: Currently working with the scipy GP version - and happy with this kernel behavior.
     
     #try: # if the GP is failing it's likely an issue with the fitting. TODO: is this the best way to handle this?
-    kernel = kernels.RationalQuadraticKernel(log_alpha=alpha, metric=metric)
+    #kernel = kernels.RationalQuadraticKernel(log_alpha=alpha, metric=metric)
     
+
     # Standard GP proceedure using scipy.minimize the log likelihood (following https://george.readthedocs.io/en/latest/tutorials/)
     gp = george.GP(kernel)
     gp.compute(x, yerr)
@@ -212,7 +260,6 @@ def evaluate_dip(gp_model, x0, y0, yerr0, R, S, glob_M, peak_loc, diagnostic=Fal
     # unpack the Gaussian Process model
     gpx, gpy, gpyerr, gp_info = gp_model
 
-
     # TODO: we're facing some issues with the true isolation of the dip. Hence the scores are off depending on the window of our function. 
     # TODO: Try to figure out a method for a more robust isolation of the dip.
     
@@ -220,7 +267,7 @@ def evaluate_dip(gp_model, x0, y0, yerr0, R, S, glob_M, peak_loc, diagnostic=Fal
     #TODO: GP peak is causing issues withthe phase. Let keep it at the centroid of the window finder.
     #loc_gp = peak_loc # maximum magnitude...
 
-    #TODO alternative peak finder
+    #TODO alternative peak finder - this might be better since we want the integral to be symmetric wrt to the gp peak...
     loc_gp = gpx[np.argmax(gpy)] # maximum magnitude...
     
     # Let's try to find the edges of the dip using the GP fit...
