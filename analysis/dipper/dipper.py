@@ -15,6 +15,7 @@ from scipy.optimize import curve_fit
 from astropy.io import ascii
 from scipy.signal import find_peaks
 import scipy.integrate as integrate
+from scipy.interpolate import interp1d
 from scipy.signal import savgol_filter
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -50,7 +51,7 @@ def deviation(mag, mag_err, R, S):
     # Calculate biweight estimators
     return (mag - R) / np.sqrt(mag_err**2 + S**2)  
 
-def calc_dip_edges(xx, yy, _cent, atol=0.2):
+def calc_dip_edges(xx, yy, _cent, atol=0.001):
     """ Calculate the edges of a dip given the center dip time. 
 
     Parameters:
@@ -70,16 +71,34 @@ def calc_dip_edges(xx, yy, _cent, atol=0.2):
     t_in_window (float): Average time difference in the given window.
     """
     
+    # TODO: needs editing to have a more reliable window finder...
+    f = interp1d(xx, yy, kind='linear')
+    x_synth = np.linspace(min(xx), max(xx), 1_000)
+    y_synth = f(x_synth)
+    x_phase = x_synth - _cent # normalize wrt to peak loc
+
+    # where does the interpolated function intersect the biweight mean?
+    mu = np.median(yy)
+    M = np.zeros(len(x_synth)) + mu 
+
+    idx = np.argwhere(np.diff(np.sign(M - y_synth))).flatten() # points of intersection...
+    times_of_inter = x_synth[idx] # MJD times of interesrection
+    phase_of_inter = abs(x_phase[idx]) # phase times of intersection
+    sore =  np.argsort(phase_of_inter)
+
+    t_forward, t_back = times_of_inter[sore][0], times_of_inter[sore][1]
+    
+    # TODO: old colde...
     # select indicies close to the center (positive)
-    indices_forward = np.where((xx > _cent) & np.isclose(yy, np.median(yy) - 0.02*np.median(yy), atol=atol))[0]
-    t_forward = xx[indices_forward[0]] if indices_forward.size > 0 else 0
+   # indices_forward = np.where((xx > _cent) & np.isclose(yy, np.median(yy), atol=atol))[0]
+   # t_forward = xx[indices_forward[0]] if indices_forward.size > 0 else 0
     
     # select indicies close to the center (negative)
-    indices_back = np.where((xx < _cent) & np.isclose(yy, np.median(yy) - 0.02*np.median(yy), atol=atol))[0]
-    if indices_back.size > 0:
-        t_back = xx[indices_back[-1]]
-    else:
-        t_back = 0
+    #indices_back = np.where((xx < _cent) & np.isclose(yy, np.median(yy), atol=atol))[0]
+    #if indices_back.size > 0:
+    #    t_back = xx[indices_back[-1]]
+    #else:
+    #    t_back = 0
         
     # Diagnostics numbers
     # How many detections above the median thresh in the given window?
@@ -88,8 +107,10 @@ def calc_dip_edges(xx, yy, _cent, atol=0.2):
     N_thresh_1 = len((yy[_window_])[sel_1_sig])
     N_in_dip = len((yy[_window_]))
 
+    
+
     # select times inside window and compute the average distance
-    t_in_window = np.mean(np.diff(xx[_window_]))
+    t_in_window = np.nanmean(np.diff(xx[_window_]))
 
     return t_forward, t_back, t_forward-_cent, _cent-t_back, N_thresh_1, N_in_dip, t_in_window
 
@@ -436,7 +457,7 @@ def best_peak_detector(peak_dictionary, min_in_dip=1):
        summary_matrix[i,:] = np.array(list(dict_summary[f'{info}'].values()))
 
     dip_table = pd.DataFrame(summary_matrix, columns=['peak_loc', 'window_start', 'window_end', 'N_1sig_in_dip', 'N_in_dip', 'loc_forward_dur', 'loc_backward_dur', 'dip_power', 'average_dt_dif'])
-
+    print (dip_table)
     dip_table_q = dip_table['N_in_dip'] >= min_in_dip # must contain at least one detection at the bottom
 
     if len(dip_table_q) == 0:

@@ -60,7 +60,8 @@ def digest_the_peak(peak_dict, time, mag, mag_err, expandby=5):
     """
 
     # Define starting pontnts
-    start, end = peak_dict['window_start'], peak_dict['window_end']
+    # TODO: make sure correct order
+    end, start = peak_dict['window_start'], peak_dict['window_end']
 
     # select
     selection = np.where((time > end-expandby) & (time < start+expandby) & (~np.isnan(time)) & (~np.isnan(mag)) & (~np.isnan(mag_err)))
