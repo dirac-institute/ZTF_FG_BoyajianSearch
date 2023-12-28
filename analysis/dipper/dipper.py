@@ -114,7 +114,7 @@ def GaussianProcess_dip(x, y, yerr, length_scale=0.01):
     kernel = 1 * RBF(length_scale=length_scale, length_scale_bounds=(1e-2, 1e3)) + ExpSineSquared(length_scale=0.5,
     periodicity=0,
     length_scale_bounds=(1e-05, 100000.0),
-    periodicity_bounds=(1e100, 1e200),) #TODO: these priors and and bounds work with current examples...
+    periodicity_bounds=(1e100, 1e200),) #TODO: these priors and and bounds work with current examples... be careful with the outsde observation windows with large gaps in the time series...
     
     noise_std = yerr
     gaussian_process = GaussianProcessRegressor(
@@ -220,7 +220,7 @@ def calculate_integral(x0, y0, yerr0, R, S):
     return integral, np.sqrt(integral_error)
 
 def calculate_assymetry_score(Int_left, Int_right, Int_err_left, Int_err_right):
-    """Calculate the assymetry score of a light curve.
+    """Calculate the assymetry score of a light curve using the GP mean curve minmum as the zero-phase of the identified dip.
     
     Parameters:
     -----------
@@ -238,7 +238,7 @@ def calculate_assymetry_score(Int_left, Int_right, Int_err_left, Int_err_right):
     
     return assymetry_score  
 
-def evaluate_dip(gp_model, x0, y0, yerr0, R, S, glob_M, peak_loc, diagnostic=False):
+def evaluate_dip(gp_model, x0, y0, yerr0, R, S, peak_loc, diagnostic=False):
     """Evaluate the dip and calculate its significance and error.
 
     Parameters:
@@ -248,7 +248,6 @@ def evaluate_dip(gp_model, x0, y0, yerr0, R, S, glob_M, peak_loc, diagnostic=Fal
     y0 (array-like): Magnitude values of the light curve dip.
     yerr0 (array-like): Magnitude errors of the light curve dip.
     R (float): Biweight location of the light curve (global).
-    glob_M (float): Global median
     S (float): Biweight scale of the light curve (global).
     diagnostic (bool): If True, plot the diagnostic plots. Default is False.
     peak_loc (float): Location of the peak of the light curve dip.
@@ -259,9 +258,6 @@ def evaluate_dip(gp_model, x0, y0, yerr0, R, S, glob_M, peak_loc, diagnostic=Fal
     """
     # unpack the Gaussian Process model
     gpx, gpy, gpyerr, gp_info = gp_model
-
-    # TODO: we're facing some issues with the true isolation of the dip. Hence the scores are off depending on the window of our function. 
-    # TODO: Try to figure out a method for a more robust isolation of the dip.
     
     # Find the peak of the GP curve
     #TODO: GP peak is causing issues withthe phase. Let keep it at the centroid of the window finder.
@@ -269,11 +265,15 @@ def evaluate_dip(gp_model, x0, y0, yerr0, R, S, glob_M, peak_loc, diagnostic=Fal
 
     #TODO alternative peak finder - this might be better since we want the integral to be symmetric wrt to the gp peak...
     loc_gp = gpx[np.argmax(gpy)] # maximum magnitude...
+
+    # If the difference is too large, let's use the peak finder peak...
+    if not np.isclose(loc_gp, peak_loc, atol=3): #TODO: is a 3 day tolerance window too small or large? My guess is that this is fine since we want the GP to be near the peak of the dip finder...
+        loc_gp = peak_loc
     
     # Let's try to find the edges of the dip using the GP fit...
     try:
         # Create an array of the global biweight location
-        M = np.zeros(len(gpy)) + glob_M # TODO: is global median the best choice here?
+        M = np.zeros(len(gpy)) + R # TODO: is global median the best choice here?
 
         # Find the indexes where the two functions intersect
         #TODO: this featue is struggling to find the edges of the dip
@@ -325,7 +325,8 @@ def evaluate_dip(gp_model, x0, y0, yerr0, R, S, glob_M, peak_loc, diagnostic=Fal
               "left_error": integral_left[1],
               "right_error": integral_right[1], 
               "log_sum_error": np.log10(sum(_gpy/_gpyerr2**2)), 
-              "chi-square": gp_info['chi-square']}
+              "chi-square": gp_info['chi-square'], 
+              "separation_btw_peaks": loc_gp-peak_loc} # check the separation between the peaks of the GP and the dip finder...
     
     if diagnostic:
         #### Diagnotstics for fitting ####

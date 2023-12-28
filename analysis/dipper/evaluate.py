@@ -46,7 +46,7 @@ def evaluate(time, mag, mag_err, flag, band, ra, dec, gaia_lite, custom_cols):
         x, y, yerr = digest_the_peak(bp, time, mag, mag_err, expandby=35)
 
         # feed to the GP
-        gp = GaussianProcess_dip(x, y, yerr, alpha=0.5, metric=100)
+        gp = GaussianProcess_dip(x, y, yerr, length_scale=0.01)
 
         # GP assesment of quality 
         gp_quality = evaluate_dip(gp, x, y, yerr, R, S, bp['peak_loc'], diagnostic=False)
