@@ -93,7 +93,7 @@ def calc_dip_edges(xx, yy, _cent, atol=0.01):
     return t_forward, t_back, t_forward-_cent, _cent-t_back, N_thresh_1, N_in_dip, t_in_window
 
 
-def GaussianProcess_dip(x, y, yerr, length_scale=0.01):
+def GaussianProcess_dip(x, y, yerr, length_scale=0.01, error_penalty=0.5):
     """Perform a Gaussian Process interpolation on the light curve dip.
     
     Parameters:
@@ -110,6 +110,11 @@ def GaussianProcess_dip(x, y, yerr, length_scale=0.01):
     pred_var (array-like): Magnitude variance of the interpolated light curve. (multiply by 1.96 for 1-sigma)
     summary dictionary (dict): Summary of the GP interpolation. Including initial and final log likelihoods, and the success status. TODO: femove features.
     """
+
+    # Penalize my errors for 
+    if np.mean(yerr) * 100 > 1:
+        yerr = yerr * error_penalty
+
     kernel = 1 * RBF(length_scale=length_scale, length_scale_bounds=(1e-2, 1e3)) + ExpSineSquared(length_scale=0.5,
     periodicity=0,
     length_scale_bounds=(1e-05, 100000.0),
@@ -435,7 +440,6 @@ def best_peak_detector(peak_dictionary, min_in_dip=1):
        summary_matrix[i,:] = np.array(list(dict_summary[f'{info}'].values()))
 
     dip_table = pd.DataFrame(summary_matrix, columns=['peak_loc', 'window_start', 'window_end', 'N_1sig_in_dip', 'N_in_dip', 'loc_forward_dur', 'loc_backward_dur', 'dip_power', 'average_dt_dif'])
-    print (dip_table)
     dip_table_q = dip_table['N_in_dip'] >= min_in_dip # must contain at least one detection at the bottom
 
     if len(dip_table_q) == 0:

@@ -41,7 +41,7 @@ def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q
 
     return time[srt], mag[srt], mag_err[srt]
 
-def digest_the_peak(peak_dict, time, mag, mag_err, expandby=5):
+def digest_the_peak(peak_dict, time, mag, mag_err, expandby=0):
     """Given the peak dictionary and data - prepare my light curve for GP analysis and integration.
     
     Parameters:
@@ -50,7 +50,7 @@ def digest_the_peak(peak_dict, time, mag, mag_err, expandby=5):
     time (array-like): Input time values.
     mag (array-like): Input magnitude values.
     mag_err (array-like): Input magnitude error values.
-    expandby (float): Number of days to expand the window by. Default is 10 days.
+    expandby (float): Number of days to expand the window by. Default is 0 days.
 
     Returns:
     --------

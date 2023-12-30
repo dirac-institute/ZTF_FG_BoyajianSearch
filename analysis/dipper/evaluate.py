@@ -43,15 +43,13 @@ def evaluate(time, mag, mag_err, flag, band, ra, dec, gaia_lite, custom_cols):
         summary_['density_arcsec2'] = np.nan
     else: # ready for a GP...
         # prepare the dip for the GP analysis...
-        x, y, yerr = digest_the_peak(bp, time, mag, mag_err, expandby=35)
+        x, y, yerr = digest_the_peak(bp, time, mag, mag_err, expandby=0)
 
         # feed to the GP
         gp = GaussianProcess_dip(x, y, yerr, length_scale=0.01)
 
         # GP assesment of quality 
         gp_quality = evaluate_dip(gp, x, y, yerr, R, S, bp['peak_loc'], diagnostic=False)
-
-        print (gp_quality)
 
         if gp_quality is not None:
             summary_['biweight_scale'] = S
@@ -68,13 +66,13 @@ def evaluate(time, mag, mag_err, flag, band, ra, dec, gaia_lite, custom_cols):
 
             # evaluate Gaia close star statistics
             _ra, _dec = np.median(ra), np.median(dec)
-            gaia_info = estimate_gaiadr3_density(_ra, _dec, gaia_lite, radius=0.01667)
+            #gaia_info = estimate_gaiadr3_density(_ra, _dec, gaia_lite, radius=0.01667)
 
-            summary_['closest_bright_star_arcsec'] = gaia_info['closest_bright_star_arcsec']
-            summary_['closest_bright_star_mag'] = gaia_info['closest_bright_star_mag']
-            summary_['closest_star_arcsec'] = gaia_info['closest_star_arcsec']
-            summary_['closest_star_mag'] = gaia_info['closest_star_mag']
-            summary_['density_arcsec2'] = gaia_info['density_arcsec2']
+            summary_['closest_bright_star_arcsec'] = 0 #gaia_info['closest_bright_star_arcsec']
+            summary_['closest_bright_star_mag'] = 0 #gaia_info['closest_bright_star_mag']
+            summary_['closest_star_arcsec'] = 0 #gaia_info['closest_star_arcsec']
+            summary_['closest_star_mag'] = 0 #gaia_info['closest_star_mag']
+            summary_['density_arcsec2'] = 0 #gaia_info['density_arcsec2']
 
             return pd.Series(list(summary_.values()), index=custom_cols)
         else:
