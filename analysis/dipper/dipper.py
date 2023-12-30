@@ -51,7 +51,7 @@ def deviation(mag, mag_err, R, S):
     # Calculate biweight estimators
     return (mag - R) / np.sqrt(mag_err**2 + S**2)  
 
-def calc_dip_edges(xx, yy, _cent, atol=0.001):
+def calc_dip_edges(xx, yy, _cent, atol=0.01):
     """ Calculate the edges of a dip given the center dip time. 
 
     Parameters:
@@ -59,7 +59,7 @@ def calc_dip_edges(xx, yy, _cent, atol=0.001):
     xx (array-like): Time values of the light curve.
     yy (array-like): Magnitude values of the light curve.
     _cent (float): Center time of the dip.
-    atol (float): Tolerance for the edge calculation. Default is 0.2.
+    atol (float): Tolerance for the edge calculation. Default is 0.01.
 
     Returns:
     --------
@@ -70,35 +70,15 @@ def calc_dip_edges(xx, yy, _cent, atol=0.001):
     N_thresh_1 (int): Number of detections above the median threshold in the given window.
     t_in_window (float): Average time difference in the given window.
     """
-    
-    # TODO: needs editing to have a more reliable window finder...
-    f = interp1d(xx, yy, kind='linear')
-    x_synth = np.linspace(min(xx), max(xx), 1_000)
-    y_synth = f(x_synth)
-    x_phase = x_synth - _cent # normalize wrt to peak loc
-
-    # where does the interpolated function intersect the biweight mean?
-    mu = np.median(yy)
-    M = np.zeros(len(x_synth)) + mu 
-
-    idx = np.argwhere(np.diff(np.sign(M - y_synth))).flatten() # points of intersection...
-    times_of_inter = x_synth[idx] # MJD times of interesrection
-    phase_of_inter = abs(x_phase[idx]) # phase times of intersection
-    sore =  np.argsort(phase_of_inter)
-
-    t_forward, t_back = times_of_inter[sore][0], times_of_inter[sore][1]
-    
-    # TODO: old colde...
-    # select indicies close to the center (positive)
-   # indices_forward = np.where((xx > _cent) & np.isclose(yy, np.median(yy), atol=atol))[0]
-   # t_forward = xx[indices_forward[0]] if indices_forward.size > 0 else 0
+    indices_forward = np.where((xx > _cent) & np.isclose(yy, np.mean(yy) - 0.7*np.std(yy), atol=atol))[0]
+    t_forward = xx[indices_forward[0]] if indices_forward.size > 0 else 0
     
     # select indicies close to the center (negative)
-    #indices_back = np.where((xx < _cent) & np.isclose(yy, np.median(yy), atol=atol))[0]
-    #if indices_back.size > 0:
-    #    t_back = xx[indices_back[-1]]
-    #else:
-    #    t_back = 0
+    indices_back = np.where((xx < _cent) & np.isclose(yy, np.mean(yy) - 0.7*np.std(yy), atol=atol))[0]
+    if indices_back.size > 0:
+        t_back = xx[indices_back[-1]]
+    else:
+        t_back = 0
         
     # Diagnostics numbers
     # How many detections above the median thresh in the given window?
@@ -106,8 +86,6 @@ def calc_dip_edges(xx, yy, _cent, atol=0.001):
     sel_1_sig = (yy[_window_]>np.median(yy) + 1*np.std(yy)) # detections above 1 sigma
     N_thresh_1 = len((yy[_window_])[sel_1_sig])
     N_in_dip = len((yy[_window_]))
-
-    
 
     # select times inside window and compute the average distance
     t_in_window = np.nanmean(np.diff(xx[_window_]))

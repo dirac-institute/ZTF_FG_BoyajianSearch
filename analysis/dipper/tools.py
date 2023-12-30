@@ -61,7 +61,7 @@ def digest_the_peak(peak_dict, time, mag, mag_err, expandby=5):
 
     # Define starting pontnts
     # TODO: make sure correct order
-    end, start = peak_dict['window_start'], peak_dict['window_end']
+    start, end = peak_dict['window_start'], peak_dict['window_end']
 
     # select
     selection = np.where((time > end-expandby) & (time < start+expandby) & (~np.isnan(time)) & (~np.isnan(mag)) & (~np.isnan(mag_err)))
@@ -103,10 +103,5 @@ def estimate_gaiadr3_density(ra_target, dec_target, gaia_lite_table, radius=0.01
         "closest_star_arcsec": delta_sep[sep_sorted][0],
         "closest_star_mag": sky_table['phot_g_mean_mag'].values[sep_sorted][0],
         "density_arcsec2": len(delta_sep)/np.pi/radius**2}
-
-
-
-
-
 
 
