@@ -62,6 +62,7 @@ def fill_gaps(time, mag, mag_err, max_gap_days=30, num_points=20, window_size=10
     filled_time (array-like): Output time values.
     filled_mag (array-like): Output magnitude values.
     filled_mag_err (array-like): Output magnitude error values.
+
     """
     
     # Identify the indices where there are gaps greater than max_gap_days
@@ -97,7 +98,7 @@ def fill_gaps(time, mag, mag_err, max_gap_days=30, num_points=20, window_size=10
         # Add additional modification
         filled_time = np.insert(filled_time, end_idx, synthetic_time)
         filled_mag = np.insert(filled_mag, end_idx, synthetic_mag + np.random.normal(0, 0.25 * np.std(mag), len(synthetic_mag)))
-        filled_mag_err = np.insert(filled_mag_err, end_idx, synthetic_mag_err + np.random.normal(0, 0.25* np.std(mag_err), len(synthetic_mag_err)))
+        filled_mag_err = np.insert(filled_mag_err, end_idx, synthetic_mag_err + np.random.normal(0, 0.1*np.std(mag_err), len(synthetic_mag_err)))
 
     return filled_time, filled_mag, filled_mag_err
 
