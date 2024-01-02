@@ -43,9 +43,64 @@ def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q
 
     return time[srt], mag[srt], mag_err[srt]
 
-#TODO: fill the seasonal gaps...
-def fill_gaps(time, mag, mag_err):
-    """Fill the seasonal gaps of my data to the mean including the scatter of the observations..."""
+
+
+def fill_gaps(time, mag, mag_err, max_gap_days=30, num_points=20, window_size=10):
+    """Fill the seasonal gaps of my data with synthetic observations based on the previous detections.
+    
+    Parameters:
+    -----------
+    time (array-like): Input time values.
+    mag (array-like): Input magnitude values.
+    mag_err (array-like): Input magnitude error values.
+    max_gap_days (float): Maximum gap size in days. Default is 30 days.
+    num_points (int): Number of synthetic points to generate. Default is 20.
+    window_size (int): Number of previous detections to use for the mean and standard deviation. Default is 10.
+
+    Returns:
+    --------
+    filled_time (array-like): Output time values.
+    filled_mag (array-like): Output magnitude values.
+    filled_mag_err (array-like): Output magnitude error values.
+    """
+    
+    # Identify the indices where there are gaps greater than max_gap_days
+    dts = np.diff(time)
+    where_big = np.where(dts > max_gap_days)[0]
+    
+    # Initialize arrays to store filled data
+    filled_time, filled_mag, filled_mag_err = time.copy(), mag.copy(), mag_err.copy()
+
+    for i in where_big:
+        # Determine the start and end indices of the gap
+        start_idx = i
+        end_idx = i + 1
+
+        # Calculate mean and standard deviation from the previous 'window_size' detections
+        if start_idx - window_size >= 0:
+            mean_mag = np.mean(mag[start_idx - window_size:start_idx])
+            std_mag = np.std(mag[start_idx - window_size:start_idx])
+            mean_mag_err = np.mean(mag_err[start_idx - window_size:start_idx])
+            std_mag_err = np.std(mag_err[start_idx - window_size:start_idx])
+        else:
+            # If there are not enough previous detections, use the overall mean and standard deviation
+            mean_mag = np.mean(mag)
+            std_mag = np.std(mag)
+            mean_mag_err = np.mean(mag_err)
+            std_mag_err = np.std(mag_err)
+
+        # Generate synthetic points within the gap
+        synthetic_time = np.linspace(time[start_idx], time[end_idx], num_points)
+        synthetic_mag = np.random.normal(loc=mean_mag, scale=std_mag, size=num_points)
+        synthetic_mag_err = np.random.normal(loc=mean_mag_err, scale=std_mag_err, size=num_points)
+
+        # Add additional modification
+        filled_time = np.insert(filled_time, end_idx, synthetic_time)
+        filled_mag = np.insert(filled_mag, end_idx, synthetic_mag + np.random.normal(0, 0.25 * np.std(mag), len(synthetic_mag)))
+        filled_mag_err = np.insert(filled_mag_err, end_idx, synthetic_mag_err + np.random.normal(0, 0.25* np.std(mag_err), len(synthetic_mag_err)))
+
+    return filled_time, filled_mag, filled_mag_err
+
 
 def digest_the_peak(peak_dict, time, mag, mag_err, expandby=0):
     """Given the peak dictionary and data - prepare my light curve for GP analysis and integration.
