@@ -88,7 +88,7 @@ def model_gp(X, Y, YERR, window_start, window_end, i0, ell=10):
     sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob2_new)
     
     ## MCMC might need adjusting on nsamplers
-    p0, lp , _ = sampler.run_mcmc(p0, 200)
+    p0, lp , _ = sampler.run_mcmc(p0, 500)
     sampler.reset()
 
     p0 = p0[np.argmax(lp)] + 1e-8 * np.random.randn(nwalkers, ndim)
@@ -97,7 +97,7 @@ def model_gp(X, Y, YERR, window_start, window_end, i0, ell=10):
     #p0, lp , _ = sampler.run_mcmc(p0, 1_000)
     #sampler.reset()
 
-    sampler.run_mcmc(p0, 1_000)
+    sampler.run_mcmc(p0, 500)
     
     samples = sampler.flatchain # fetch the flatchain samples
     

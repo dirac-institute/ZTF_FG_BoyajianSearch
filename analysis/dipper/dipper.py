@@ -70,11 +70,11 @@ def calc_dip_edges(xx, yy, _cent, atol=0.01):
     N_thresh_1 (int): Number of detections above the median threshold in the given window.
     t_in_window (float): Average time difference in the given window.
     """
-    indices_forward = np.where((xx > _cent) & np.isclose(yy, np.mean(yy) - 0.7*np.std(yy), atol=atol))[0]
+    indices_forward = np.where((xx > _cent) & np.isclose(yy, np.mean(yy) - 0.5*np.std(yy), atol=atol))[0]
     t_forward = xx[indices_forward[0]] if indices_forward.size > 0 else 0
     
     # select indicies close to the center (negative)
-    indices_back = np.where((xx < _cent) & np.isclose(yy, np.mean(yy) - 0.7*np.std(yy), atol=atol))[0]
+    indices_back = np.where((xx < _cent) & np.isclose(yy, np.mean(yy) - 0.5*np.std(yy), atol=atol))[0]
     if indices_back.size > 0:
         t_back = xx[indices_back[-1]]
     else:
@@ -440,6 +440,10 @@ def best_peak_detector(peak_dictionary, min_in_dip=1):
     """
     # unpack dictionary
     N_peaks, dict_summary = peak_dictionary
+
+    # if there's only one peak
+    if N_peaks ==1:
+        return pd.DataFrame((dict_summary.values()))
     
     summary_matrix = np.zeros(shape=(N_peaks, 9)) # TODO: add more columns to this matrix
     for i, info in enumerate(dict_summary.keys()):

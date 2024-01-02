@@ -4,6 +4,8 @@ Tools for analysis.
 import numpy as np
 from astropy.coordinates import SkyCoord
 import astropy.units as u
+from astropy.modeling.models import Gaussian1D
+from astropy.modeling import fitting
 
 
 def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q=None, custom_q=False):
@@ -41,6 +43,10 @@ def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q
 
     return time[srt], mag[srt], mag_err[srt]
 
+#TODO: fill the seasonal gaps...
+def fill_gaps(time, mag, mag_err):
+    """Fill the seasonal gaps of my data to the mean including the scatter of the observations..."""
+
 def digest_the_peak(peak_dict, time, mag, mag_err, expandby=0):
     """Given the peak dictionary and data - prepare my light curve for GP analysis and integration.
     
@@ -61,7 +67,7 @@ def digest_the_peak(peak_dict, time, mag, mag_err, expandby=0):
 
     # Define starting pontnts
     # TODO: make sure correct order
-    start, end = peak_dict['window_start'], peak_dict['window_end']
+    start, end = peak_dict['window_start'].values[0], peak_dict['window_end'].values[0]
 
     # select
     selection = np.where((time > end-expandby) & (time < start+expandby) & (~np.isnan(time)) & (~np.isnan(mag)) & (~np.isnan(mag_err)))
@@ -147,3 +153,23 @@ def bin_counter(xdat, ydat, bin_width=3):
     return bin_centroid, value_count, running_median
 
 
+def quick_Gaussian_fit(time, running_deviation):
+    """LevMarSQFitter Gaussian fit to the running deviation.
+    
+    Parameters:
+    -----------
+    time (array-like): Array of time values.
+    running_deviation (array-like): Array of running deviation values.
+
+    Returns:
+    --------
+    summary (dict): Dictionary of the Gaussian fit parameters.
+    """
+    t_init = Gaussian1D(amplitude=50., mean=time[np.argmax(running_deviation)]-1, stddev=1, 
+                          bounds={"amplitude": (3, max(running_deviation)), 
+                                 "mean": (time[np.argmax(running_deviation)]-535,
+                                          time[np.argmax(running_deviation)]+535), 
+                                 "stddev": (0.1, 1_000)})
+    fit_t = fitting.LevMarLSQFitter()
+    t = fit_t(t_init, time, running_deviation, maxiter=2_000)
+    return dict(amplitude=t.amplitude.value, mean=t.mean.value, stddev=t.stddev.value)
