@@ -66,13 +66,13 @@ def evaluate(time, mag, mag_err, flag, band, ra, dec, gaia_lite, custom_cols):
 
             # evaluate Gaia close star statistics
             _ra, _dec = np.median(ra), np.median(dec)
-            #gaia_info = estimate_gaiadr3_density(_ra, _dec, gaia_lite, radius=0.01667)
+            gaia_info = estimate_gaiadr3_density(_ra, _dec, gaia_lite, radius=0.01667)
 
-            summary_['closest_bright_star_arcsec'] = 0 #gaia_info['closest_bright_star_arcsec']
-            summary_['closest_bright_star_mag'] = 0 #gaia_info['closest_bright_star_mag']
-            summary_['closest_star_arcsec'] = 0 #gaia_info['closest_star_arcsec']
-            summary_['closest_star_mag'] = 0 #gaia_info['closest_star_mag']
-            summary_['density_arcsec2'] = 0 #gaia_info['density_arcsec2']
+            summary_['closest_bright_star_arcsec'] = gaia_info['closest_bright_star_arcsec']
+            summary_['closest_bright_star_mag'] = gaia_info['closest_bright_star_mag']
+            summary_['closest_star_arcsec'] = gaia_info['closest_star_arcsec']
+            summary_['closest_star_mag'] = gaia_info['closest_star_mag']
+            summary_['density_arcsec2'] = gaia_info['density_arcsec2']
 
             return pd.Series(list(summary_.values()), index=custom_cols)
         else:

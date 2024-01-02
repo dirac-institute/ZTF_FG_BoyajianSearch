@@ -79,10 +79,15 @@ def calc_dip_edges(xx, yy, _cent, atol=0.01):
         t_back = xx[indices_back[-1]]
     else:
         t_back = 0
-        
+
+    #TODO: might require a more expantable version...
+    #TODO: impose requirement to have 5 detections on the baseline of the dip
+    #TODO: give me the first 5 detections that are within the quntiles of the data...
+
     # Diagnostics numbers
     # How many detections above the median thresh in the given window?
     _window_ = (xx>t_back) & (xx<t_forward)
+
     sel_1_sig = (yy[_window_]>np.median(yy) + 1*np.std(yy)) # detections above 1 sigma
     N_thresh_1 = len((yy[_window_])[sel_1_sig])
     N_in_dip = len((yy[_window_]))
@@ -111,18 +116,20 @@ def GaussianProcess_dip(x, y, yerr, length_scale=0.01, error_penalty=0.5):
     summary dictionary (dict): Summary of the GP interpolation. Including initial and final log likelihoods, and the success status. TODO: femove features.
     """
 
+    #TODO: interpolating the light curve might help us with the GP fitting.
+    f = interp1d(x, y, kind='linear')
+    x = np.linspace(min(x), max(x), len(x))
+    y = f(x)
+
     # Penalize my errors for 
     if np.mean(yerr) * 100 > 1:
         yerr = yerr * error_penalty
 
-    kernel = 1 * RBF(length_scale=length_scale, length_scale_bounds=(1e-2, 1e3)) + ExpSineSquared(length_scale=0.5,
-    periodicity=0,
-    length_scale_bounds=(1e-05, 100000.0),
-    periodicity_bounds=(1e100, 1e200),) #TODO: these priors and and bounds work with current examples... be careful with the outsde observation windows with large gaps in the time series...
+    kernel = 1 * RBF(length_scale=length_scale, length_scale_bounds=(1e-3, 1e3))
     
     noise_std = yerr
     gaussian_process = GaussianProcessRegressor(
-    kernel=kernel, alpha=noise_std**2, n_restarts_optimizer=100)
+    kernel=kernel, alpha=noise_std**2, n_restarts_optimizer=10)
 
     gaussian_process.fit(x.reshape(-1, 1), y)
 
@@ -160,9 +167,8 @@ def GaussianProcess_dip_old(x, y, yerr, alpha=0.5, metric=100):
     #TODO: Currently working with the scipy GP version - and happy with this kernel behavior.
     
     #try: # if the GP is failing it's likely an issue with the fitting. TODO: is this the best way to handle this?
-    #kernel = kernels.RationalQuadraticKernel(log_alpha=alpha, metric=metric)
+    kernel = kernels.RationalQuadraticKernel(log_alpha=alpha, metric=metric)
     
-
     # Standard GP proceedure using scipy.minimize the log likelihood (following https://george.readthedocs.io/en/latest/tutorials/)
     gp = george.GP(kernel)
     gp.compute(x, yerr)

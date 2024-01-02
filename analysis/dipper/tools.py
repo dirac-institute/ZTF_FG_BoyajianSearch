@@ -105,3 +105,45 @@ def estimate_gaiadr3_density(ra_target, dec_target, gaia_lite_table, radius=0.01
         "density_arcsec2": len(delta_sep)/np.pi/radius**2}
 
 
+def bin_counter(xdat, ydat, bin_width=3):
+    """Calculate the number of points per bin"""
+    bins = np.arange(min(xdat), max(xdat), step=bin_width)
+    value_count = []
+    bin_centroid = []
+    for i in range(0, len(bins)-1):
+        _cond = np.where((xdat > bins[i]) & (xdat < bins[i+1]))
+        value_count.append(len(_cond[0]))
+        bin_centroid.append(0.5*(bins[i] + bins[i+1]))
+    return np.array(bin_centroid), np.array(value_count)
+   
+
+def bin_counter(xdat, ydat, bin_width=3):
+    """
+    Calculate the number of points per bin and the running median of y-values.
+
+    Parameters:
+    -----------
+    xdat (array-like): Array of x-values.
+    ydat (array-like): Array of y-values.
+    bin_width (float): Width of each bin. Default is 3.
+
+    Returns:
+    --------
+    bin_centroid (ndarray): Array of bin centroids.
+    value_count (ndarray): Array of counts per bin.
+    running_median (ndarray): Array of running medians of y-values.
+    """
+    bins = np.arange(min(xdat), max(xdat), step=bin_width)
+    value_count, bin_edges = np.histogram(xdat, bins=bins)
+    bin_centroid = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+    
+    running_median = []
+    for i in range(len(bin_centroid)):
+        bin_indices = np.where((xdat > bin_edges[i]) & (xdat < bin_edges[i+1]))
+        y_values = ydat[bin_indices]
+        median = np.median(y_values)
+        running_median.append(median)
+    
+    return bin_centroid, value_count, running_median
+
+
