@@ -48,7 +48,7 @@ class PolynomialModel(Model_George):
                self.amp * np.exp(-0.5*(t-self.location)**2/(self.sigma**2) * np.exp(-self.log_sigma2)))
 
 
-def model_gp(X, Y, YERR, window_start, window_end, i0, ell=5):
+def model_gp(X, Y, YERR, window_start, window_end, i0, ell=10):
     """Reuturn the Gaussian process data....
     
     Parameters
@@ -65,9 +65,9 @@ def model_gp(X, Y, YERR, window_start, window_end, i0, ell=5):
     kwargs = dict(**i0)
     kwargs["bounds"] = dict(m=(None, None), 
                                 b=(None, None), 
-                                amp=(None, None), 
+                                amp=(0.1, 1000), 
                                 location=(window_start, window_end), # adding boundaries to the location...
-                                sigma=(None, None)
+                                sigma=(0, 100),
                                 log_sigma2=(None, None)) 
     mean_model = Model(**kwargs)
                            
@@ -106,7 +106,7 @@ def model_gp(X, Y, YERR, window_start, window_end, i0, ell=5):
     for i in range(6):
          arg_mu.append(np.median(samples[:,i]))
             
-    x = np.linspace(min(X), max(X), 1_000)
+    x = np.linspace(min(X), max(X), 5_000)
     
     gp.set_parameter_vector(arg_mu)
     model_best = gp.sample_conditional(Y, x)
