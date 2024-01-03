@@ -8,6 +8,61 @@ from astropy.modeling.models import Gaussian1D
 from astropy.modeling import fitting
 
 
+def expandable_window(xdat, ydat, cent, atol=0.05):
+    """ Calcualte the window size for a given peak. 
+    
+    Parameters:
+    -----------
+    xdat (array-like): Input time values.
+    ydat (array-like): Input deviation values.
+    cent (float): Center of the peak.
+
+    Returns:
+    --------
+    window_end_pos (float): Window end for the positive side.
+    window_end_neg (float): Window end for the negative side.
+    """
+    phase = xdat - cent
+    
+    pos_condition = phase > 0
+    neg_condition = phase < 0
+
+    p_x_pos, p_y_pos = xdat[pos_condition], ydat[pos_condition]
+    p_xs_pos = np.argsort(p_x_pos)[::-1]
+
+    p_x_neg, p_y_neg = xdat[neg_condition], ydat[neg_condition]
+    p_xs_neg = np.argsort(p_x_neg)
+
+    window_end_pos = find_window_end(p_x_pos[p_xs_pos], p_y_pos[p_xs_pos], atol=atol)
+    window_end_neg = find_window_end(p_x_neg[p_xs_neg], p_y_neg[p_xs_neg], atol=atol)
+
+    return window_end_pos, window_end_neg
+
+def find_window_end(p_x, p_y, dif=0.001, atol=0.05):
+    """ Find the window end for a given peak by searching the neighbouring until the difference is minimized.
+    
+    Parameters:
+    -----------
+    p_x (array-like): Input time values.
+    p_y (array-like): Input deviation values.
+
+    Returns:
+    --------
+    window_end (float): Window end.
+    """
+    window_end = 0
+    for i in range(len(p_x) - 1):
+        xi, yi = p_x[i], p_y[i]
+        xi2, yi2 = p_x[i + 1], p_y[i + 1]
+
+        delta_diff = yi2 - yi
+
+        if np.isclose(delta_diff, dif, atol=atol):
+            window_end = xi2
+
+    return window_end
+    
+
 def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q=None, custom_q=False):
     """
     Prepare the light curve for analysis - specifically for the ZTF data.
@@ -44,8 +99,7 @@ def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q
     return time[srt], mag[srt], mag_err[srt]
 
 
-
-def fill_gaps(time, mag, mag_err, max_gap_days=30, num_points=20, window_size=10):
+def fill_gaps(time, mag, mag_err, max_gap_days=90, num_points=20, window_size=20):
     """Fill the seasonal gaps of my data with synthetic observations based on the previous detections.
     
     Parameters:
@@ -53,7 +107,7 @@ def fill_gaps(time, mag, mag_err, max_gap_days=30, num_points=20, window_size=10
     time (array-like): Input time values.
     mag (array-like): Input magnitude values.
     mag_err (array-like): Input magnitude error values.
-    max_gap_days (float): Maximum gap size in days. Default is 30 days.
+    max_gap_days (float): Maximum gap size in days. Default is 90 days.
     num_points (int): Number of synthetic points to generate. Default is 20.
     window_size (int): Number of previous detections to use for the mean and standard deviation. Default is 10.
 
@@ -98,9 +152,10 @@ def fill_gaps(time, mag, mag_err, max_gap_days=30, num_points=20, window_size=10
         # Add additional modification
         filled_time = np.insert(filled_time, end_idx, synthetic_time)
         filled_mag = np.insert(filled_mag, end_idx, synthetic_mag + np.random.normal(0, 0.25 * np.std(mag), len(synthetic_mag)))
-        filled_mag_err = np.insert(filled_mag_err, end_idx, synthetic_mag_err + np.random.normal(0, 0.1*np.std(mag_err), len(synthetic_mag_err)))
+        filled_mag_err = np.insert(filled_mag_err, end_idx, synthetic_mag_err + np.random.normal(0, 1*np.std(mag_err), len(synthetic_mag_err)))
 
-    return filled_time, filled_mag, filled_mag_err
+    xs = np.argsort(filled_time)
+    return filled_time[xs], filled_mag[xs], filled_mag_err[xs]
 
 
 def digest_the_peak(peak_dict, time, mag, mag_err, expandby=0):
@@ -123,7 +178,11 @@ def digest_the_peak(peak_dict, time, mag, mag_err, expandby=0):
 
     # Define starting pontnts
     # TODO: make sure correct order
-    start, end = peak_dict['window_start'].values[0], peak_dict['window_end'].values[0]
+
+    try:
+        start, end = peak_dict['window_start'].values[0], peak_dict['window_end'].values[0]
+    except:
+        start, end = peak_dict['window_start'], peak_dict['window_end']
 
     # select
     selection = np.where((time > end-expandby) & (time < start+expandby) & (~np.isnan(time)) & (~np.isnan(mag)) & (~np.isnan(mag_err)))
@@ -166,18 +225,6 @@ def estimate_gaiadr3_density(ra_target, dec_target, gaia_lite_table, radius=0.01
         "closest_star_mag": sky_table['phot_g_mean_mag'].values[sep_sorted][0],
         "density_arcsec2": len(delta_sep)/np.pi/radius**2}
 
-
-def bin_counter(xdat, ydat, bin_width=3):
-    """Calculate the number of points per bin"""
-    bins = np.arange(min(xdat), max(xdat), step=bin_width)
-    value_count = []
-    bin_centroid = []
-    for i in range(0, len(bins)-1):
-        _cond = np.where((xdat > bins[i]) & (xdat < bins[i+1]))
-        value_count.append(len(_cond[0]))
-        bin_centroid.append(0.5*(bins[i] + bins[i+1]))
-    return np.array(bin_centroid), np.array(value_count)
-   
 
 def bin_counter(xdat, ydat, bin_width=3):
     """

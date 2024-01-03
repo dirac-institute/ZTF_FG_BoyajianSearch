@@ -19,6 +19,7 @@ from scipy.interpolate import interp1d
 from scipy.signal import savgol_filter
 import pandas as pd
 import matplotlib.pyplot as plt
+from tools import expandable_window
 
 
 _all_funcs = ["deviation", 
@@ -51,7 +52,7 @@ def deviation(mag, mag_err, R, S):
     # Calculate biweight estimators
     return (mag - R) / np.sqrt(mag_err**2 + S**2)  
 
-def calc_dip_edges(xx, yy, _cent, atol=0.01):
+def calc_dip_edges(xx, yy, _cent, atol=0.005):
     """ Calculate the edges of a dip given the center dip time. 
 
     Parameters:
@@ -70,19 +71,22 @@ def calc_dip_edges(xx, yy, _cent, atol=0.01):
     N_thresh_1 (int): Number of detections above the median threshold in the given window.
     t_in_window (float): Average time difference in the given window.
     """
-    indices_forward = np.where((xx > _cent) & np.isclose(yy, np.mean(yy) - 0.5*np.std(yy), atol=atol))[0]
-    t_forward = xx[indices_forward[0]] if indices_forward.size > 0 else 0
+    
+    #indices_forward = np.where((xx > _cent) & np.isclose(yy, np.mean(yy) - 0.5*np.std(yy), atol=atol))[0]
+    #t_forward = xx[indices_forward[0]] if indices_forward.size > 0 else 0
     
     # select indicies close to the center (negative)
-    indices_back = np.where((xx < _cent) & np.isclose(yy, np.mean(yy) - 0.5*np.std(yy), atol=atol))[0]
-    if indices_back.size > 0:
-        t_back = xx[indices_back[-1]]
-    else:
-        t_back = 0
+    #indices_back = np.where((xx < _cent) & np.isclose(yy, np.mean(yy) - 0.5*np.std(yy), atol=atol))[0]
+    #if indices_back.size > 0:
+    #    t_back = xx[indices_back[-1]]
+    #else:
+    #    t_back = 0
 
     #TODO: might require a more expantable version...
     #TODO: impose requirement to have 5 detections on the baseline of the dip
     #TODO: give me the first 5 detections that are within the quntiles of the data...
+
+    t_forward, t_back = expandable_window(xx, yy, _cent, atol=atol)
 
     # Diagnostics numbers
     # How many detections above the median thresh in the given window?
@@ -440,20 +444,19 @@ def best_peak_detector(peak_dictionary, min_in_dip=1):
     """
     # unpack dictionary
     N_peaks, dict_summary = peak_dictionary
-
-    # if there's only one peak
-    if N_peaks ==1:
-        return pd.DataFrame((dict_summary.values()))
     
     summary_matrix = np.zeros(shape=(N_peaks, 9)) # TODO: add more columns to this matrix
     for i, info in enumerate(dict_summary.keys()):
        summary_matrix[i,:] = np.array(list(dict_summary[f'{info}'].values()))
 
     dip_table = pd.DataFrame(summary_matrix, columns=['peak_loc', 'window_start', 'window_end', 'N_1sig_in_dip', 'N_in_dip', 'loc_forward_dur', 'loc_backward_dur', 'dip_power', 'average_dt_dif'])
+
     dip_table_q = dip_table['N_in_dip'] >= min_in_dip # must contain at least one detection at the bottom
 
     if len(dip_table_q) == 0:
         print ("No dip is found within the minimum number of detections.")
         return None
-
-    return dip_table.iloc[dip_table[dip_table_q]['dip_power'].idxmax()]
+    elif len(dip_table_q)==1:
+        return dip_table 
+    else:
+        return dip_table.iloc[dip_table[dip_table_q]['dip_power'].idxmax()]

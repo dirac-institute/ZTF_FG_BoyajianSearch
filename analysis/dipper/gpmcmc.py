@@ -65,9 +65,9 @@ def model_gp(X, Y, YERR, window_start, window_end, i0, ell=10):
     kwargs = dict(**i0)
     kwargs["bounds"] = dict(m=(None, None), 
                                 b=(None, None), 
-                                amp=(0.1, 1000), 
-                                location=(window_start, window_end), # adding boundaries to the location...
-                                sigma=(0, 100),
+                                amp=(0.01, 10000), 
+                                location=(window_start-10, window_end+10), # adding boundaries to the location...
+                                sigma=(0, 1000),
                                 log_sigma2=(None, None)) 
     mean_model = Model(**kwargs)
                            
@@ -97,7 +97,7 @@ def model_gp(X, Y, YERR, window_start, window_end, i0, ell=10):
     #p0, lp , _ = sampler.run_mcmc(p0, 1_000)
     #sampler.reset()
 
-    sampler.run_mcmc(p0, 500)
+    sampler.run_mcmc(p0, 1_000)
     
     samples = sampler.flatchain # fetch the flatchain samples
     
@@ -105,10 +105,24 @@ def model_gp(X, Y, YERR, window_start, window_end, i0, ell=10):
     arg_mu = []
     for i in range(6):
          arg_mu.append(np.median(samples[:,i]))
-            
+
     x = np.linspace(min(X), max(X), 5_000)
-    
+
     gp.set_parameter_vector(arg_mu)
-    model_best = gp.sample_conditional(Y, x)
-    
-    return x, model_best
+    model_best = gp.predict(Y, x, return_var=True) #gp.sample_conditional(Y, x)
+
+    return x, model_best[0], model_best[1], {
+        "log-like":  gp.log_likelihood(Y, quiet=True),
+        "amp_median": np.median(samples[:, 0]),
+        "amp_std": np.std(samples[:, 0]),
+        "location_median": np.median(samples[:, 1]),
+        "location_std": np.std(samples[:, 1]),
+        "sigma_median": np.median(samples[:, 2]),
+        "sigma_std": np.std(samples[:, 2]),
+        "log_sigma2_median": np.median(samples[:, 3]),
+        "log_sigma2_std": np.std(samples[:, 3]),
+        "m_median": np.median(samples[:, 4]),
+        "m_std": np.std(samples[:, 4]),
+        "b_median": np.median(samples[:, 5]),
+        "b_std": np.std(samples[:, 5])
+    },
