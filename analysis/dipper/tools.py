@@ -6,9 +6,11 @@ from astropy.coordinates import SkyCoord
 import astropy.units as u
 from astropy.modeling.models import Gaussian1D
 from astropy.modeling import fitting
+from astroquery.gaia import Gaia
+meta = Gaia.load_table('gaiadr3.gaia_source')
 
 
-def expandable_window(xdat, ydat, cent, atol=0.05):
+def expandable_window(xdat, ydat, cent, atol=0.001):
     """ Calcualte the window size for a given peak. 
     
     Parameters:
@@ -38,7 +40,7 @@ def expandable_window(xdat, ydat, cent, atol=0.05):
 
     return window_end_pos, window_end_neg
 
-def find_window_end(p_x, p_y, dif=0.001, atol=0.05):
+def find_window_end(p_x, p_y, dif=1.86, atol=0.005):
     """ Find the window end for a given peak by searching the neighbouring until the difference is minimized.
     
     Parameters:
@@ -90,16 +92,14 @@ def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q
         # Selection and preparation of the light curve (default selection on )
         rmv = (flag == flag_good) & (band==band_of_study)
     
-    # TODO: I'm working with the numpy values because we had some unexpected issues. Check if stable.
-    time, mag, mag_err = time[rmv].values, mag[rmv].values, mag_err[rmv].values
+    time, mag, mag_err = time[rmv], mag[rmv], mag_err[rmv]
     
     # sort time
     srt = np.argsort(time)
 
     return time[srt], mag[srt], mag_err[srt]
 
-
-def fill_gaps(time, mag, mag_err, max_gap_days=90, num_points=20, window_size=20):
+def fill_gaps(time, mag, mag_err, max_gap_days=90, num_points=20, window_size=0):
     """Fill the seasonal gaps of my data with synthetic observations based on the previous detections.
     
     Parameters:
@@ -131,28 +131,26 @@ def fill_gaps(time, mag, mag_err, max_gap_days=90, num_points=20, window_size=20
         start_idx = i
         end_idx = i + 1
 
-        # Calculate mean and standard deviation from the previous 'window_size' detections
-        if start_idx - window_size >= 0:
-            mean_mag = np.mean(mag[start_idx - window_size:start_idx])
-            std_mag = np.std(mag[start_idx - window_size:start_idx])
-            mean_mag_err = np.mean(mag_err[start_idx - window_size:start_idx])
-            std_mag_err = np.std(mag_err[start_idx - window_size:start_idx])
-        else:
-            # If there are not enough previous detections, use the overall mean and standard deviation
-            mean_mag = np.mean(mag)
-            std_mag = np.std(mag)
-            mean_mag_err = np.mean(mag_err)
-            std_mag_err = np.std(mag_err)
+        # Calculate median from the last 5 and next 5 detections
+        last5_median = np.median(mag[max(0, start_idx - 5):start_idx])
+        next5_median = np.median(mag[end_idx:end_idx + 5])
+        mean_mag = np.linspace(last5_median, next5_median, num_points)
+        
+        # Calculate standard deviation from the last 5 and next 5 detections
+        last5_std = np.std(mag[max(0, start_idx - 5):start_idx])
+        next5_std = np.std(mag[end_idx:end_idx + 5])
+        std_mag = np.linspace(last5_std, next5_std, num_points)
 
         # Generate synthetic points within the gap
-        synthetic_time = np.linspace(time[start_idx], time[end_idx], num_points)
-        synthetic_mag = np.random.normal(loc=mean_mag, scale=std_mag, size=num_points)
-        synthetic_mag_err = np.random.normal(loc=mean_mag_err, scale=std_mag_err, size=num_points)
+        synthetic_time = np.linspace(time[start_idx]+10, time[end_idx], num_points)
+        synthetic_mag = np.random.normal(loc=mean_mag, scale=std_mag)
+        synthetic_mag_err = np.random.normal(loc=np.mean(mag_err), scale=np.std(mag_err), size=num_points)
 
-        # Add additional modification
-        filled_time = np.insert(filled_time, end_idx, synthetic_time)
-        filled_mag = np.insert(filled_mag, end_idx, synthetic_mag + np.random.normal(0, 0.25 * np.std(mag), len(synthetic_mag)))
-        filled_mag_err = np.insert(filled_mag_err, end_idx, synthetic_mag_err + np.random.normal(0, 1*np.std(mag_err), len(synthetic_mag_err)))
+        # Add additional modification without overlapping old data
+        mask = (synthetic_time >= time[start_idx]) & (synthetic_time <= time[end_idx])
+        filled_time = np.concatenate([filled_time[:end_idx], synthetic_time[mask], filled_time[end_idx:]])
+        filled_mag = np.concatenate([filled_mag[:end_idx], synthetic_mag[mask] + np.random.normal(0, 0.2 * np.std(mag), np.sum(mask)), filled_mag[end_idx:]])
+        filled_mag_err = np.concatenate([filled_mag_err[:end_idx], synthetic_mag_err[mask] + np.random.normal(0, 1*np.std(mag_err), np.sum(mask)), filled_mag_err[end_idx:]])
 
     xs = np.argsort(filled_time)
     return filled_time[xs], filled_mag[xs], filled_mag_err[xs]
@@ -189,6 +187,27 @@ def digest_the_peak(peak_dict, time, mag, mag_err, expandby=0):
 
     return time[selection], mag[selection], mag_err[selection]
 
+def estimate_gaiadr3_density_async(ra_target, dec_target, radius=0.01667):
+    query1 = f"""SELECT
+                ra, dec, parallax, phot_g_mean_mag,
+                DISTANCE(
+                    POINT('ICRS',gaiadr3.gaia_source.ra,gaiadr3.gaia_source.dec),
+                    POINT('ICRS',{ra_target}, {dec_target})
+                ) AS separation
+                FROM gaiadr3.gaia_source
+                WHERE 1=CONTAINS(POINT('ICRS',gaiadr3.gaia_source.ra,gaiadr3.gaia_source.dec),
+                                CIRCLE('ICRS',{ra_target}, {dec_target},1./60.))
+                ORDER BY separation ASC
+                            """
+    tbl = Gaia.launch_job(query1, dump_to_file=False).get_results()
+
+    return {"closest_bright_star_arcsec": tbl[np.argmin(tbl['phot_g_mean_mag'])]['separation'],
+    "closest_bright_star_mag": tbl[np.argmin(tbl['phot_g_mean_mag'])]['phot_g_mean_mag'], 
+    "closest_star_arcsec": tbl['separation'][0],
+    "closest_star_mag": tbl['phot_g_mean_mag'][0],
+    "density_arcsec2": len(tbl)/(np.pi*radius**2)}
+
+
 def estimate_gaiadr3_density(ra_target, dec_target, gaia_lite_table, radius=0.01667):
     """
     Estimate the density of stars in the Gaia DR3 catalog around a given target.
@@ -208,7 +227,13 @@ def estimate_gaiadr3_density(ra_target, dec_target, gaia_lite_table, radius=0.01
     """
 
     sky_table = gaia_lite_table.cone_search(ra=ra_target, dec=dec_target, radius=radius).compute()
-    assert len(sky_table) > 0, "No stars found in the Gaia DR3 catalog around the target."
+    
+    if len(sky_table) == 0:
+        {"closest_bright_star_arcsec": 0,
+        "closest_bright_star_mag": 0, 
+        "closest_star_arcsec": 0,
+        "closest_star_mag": 0,
+        "density_arcsec2": 0}
 
     sky = SkyCoord(ra=sky_table['ra'].values*u.deg, dec=sky_table['dec'].values*u.deg, frame='icrs')
     sky_target = SkyCoord(ra=ra_target*u.deg, dec=dec_target*u.deg, frame='icrs') # sky coord of object of interest

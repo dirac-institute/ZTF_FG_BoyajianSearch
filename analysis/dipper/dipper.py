@@ -52,7 +52,7 @@ def deviation(mag, mag_err, R, S):
     # Calculate biweight estimators
     return (mag - R) / np.sqrt(mag_err**2 + S**2)  
 
-def calc_dip_edges(xx, yy, _cent, atol=0.005):
+def calc_dip_edges(xx, yy, _cent, atol=1e-32):
     """ Calculate the edges of a dip given the center dip time. 
 
     Parameters:
@@ -72,21 +72,21 @@ def calc_dip_edges(xx, yy, _cent, atol=0.005):
     t_in_window (float): Average time difference in the given window.
     """
     
-    #indices_forward = np.where((xx > _cent) & np.isclose(yy, np.mean(yy) - 0.5*np.std(yy), atol=atol))[0]
-    #t_forward = xx[indices_forward[0]] if indices_forward.size > 0 else 0
+    indices_forward = np.where((xx > _cent) & np.isclose(yy, np.mean(yy) - 0.5*np.std(yy), atol=atol))[0]
+    t_forward = xx[indices_forward[0]] if indices_forward.size > 0 else 0
     
     # select indicies close to the center (negative)
-    #indices_back = np.where((xx < _cent) & np.isclose(yy, np.mean(yy) - 0.5*np.std(yy), atol=atol))[0]
-    #if indices_back.size > 0:
-    #    t_back = xx[indices_back[-1]]
-    #else:
-    #    t_back = 0
+    indices_back = np.where((xx < _cent) & np.isclose(yy, np.mean(yy) - 0.5*np.std(yy), atol=atol))[0]
+    if indices_back.size > 0:
+        t_back = xx[indices_back[-1]]
+    else:
+        t_back = 0
 
     #TODO: might require a more expantable version...
     #TODO: impose requirement to have 5 detections on the baseline of the dip
     #TODO: give me the first 5 detections that are within the quntiles of the data...
 
-    t_forward, t_back = expandable_window(xx, yy, _cent, atol=atol)
+    #t_forward, t_back = expandable_window(xx, yy, _cent, atol=atol)
 
     # Diagnostics numbers
     # How many detections above the median thresh in the given window?
@@ -281,32 +281,35 @@ def evaluate_dip(gp_model, x0, y0, yerr0, R, S, peak_loc, diagnostic=False):
     loc_gp = gpx[np.argmax(gpy)] # maximum magnitude...
 
     # If the difference is too large, let's use the peak finder peak...
-    if not np.isclose(loc_gp, peak_loc, atol=3): #TODO: is a 3 day tolerance window too small or large? My guess is that this is fine since we want the GP to be near the peak of the dip finder...
-        loc_gp = peak_loc
+    #if not np.isclose(loc_gp, peak_loc, atol=10): #TODO: is a 3 day tolerance window too small or large? My guess is that this is fine since we want the GP to be near the peak of the dip finder...
+    #    print ("Warning!")
+    #    loc_gp = peak_loc
     
     # Let's try to find the edges of the dip using the GP fit...
-    try:
-        # Create an array of the global biweight location
-        M = np.zeros(len(gpy)) + R # TODO: is global median the best choice here?
+    #try:
+    #    # Create an array of the global biweight location
+    #    M = np.zeros(len(gpy)) + R # TODO: is global median the best choice here?
 
-        # Find the indexes where the two functions intersect
+    #    # Find the indexes where the two functions intersect
         #TODO: this featue is struggling to find the edges of the dip
-        idx = np.argwhere(np.diff(np.sign(M - gpy))).flatten()
+    #    idx = np.argwhere(np.diff(np.sign(M - gpy))).flatten()
         
         #GP model times where they intersect
-        tdx = gpx[idx]
-        tdx_phase = loc_gp - tdx # normalize wrt to peak loc
+    #    tdx = gpx[idx]
+    #    tdx_phase = loc_gp - tdx # normalize wrt to peak loc
         
         # Select either positive or negative phase of the GP fit
-        w_pos = tdx_phase>0
-        w_neg = tdx_phase<0
+    #    w_pos = tdx_phase>0
+    #    w_neg = tdx_phase<0
 
-        w_end = min(tdx[w_neg])
-        w_start = max(tdx[w_pos])
-    except:
+    #    w_end = min(tdx[w_neg])
+    #    w_start = max(tdx[w_pos])
+    #except:
         # If the GP is failing, let's use the edges from the dip finder...
-        find = calc_dip_edges(x0, y0, peak_loc, atol=0.2)
-        w_start, w_end = find[0], find[1]
+    #    find = calc_dip_edges(x0, y0, peak_loc, atol=0.2)
+    #    w_start, w_end = find[0], find[1]
+
+    w_start, w_end = np.min(x0), np.max(x0) # use the entire window of the dip finder...
     
     # Select the GP area of interest
     sel_gp = np.where((gpx>=w_start) & (gpx<=w_end))
@@ -338,8 +341,20 @@ def evaluate_dip(gp_model, x0, y0, yerr0, R, S, peak_loc, diagnostic=False):
     summary = {"assymetry_score": IScore, 
               "left_error": integral_left[1],
               "right_error": integral_right[1], 
-              "log_sum_error": np.log10(sum(_gpy/_gpyerr2**2)), 
-              "chi-square": gp_info['chi-square'], 
+              "log_sum_error": np.log10(sum(_gpy/_gpyerr2**2)),
+              "log-like":gp_info["log-like"],
+                "amp_median":gp_info["amp_median"],
+                "amp_std":gp_info["amp_std"],
+                "location_median":gp_info["location_median"],
+                "location_std":gp_info["location_std"],
+                "sigma_median":gp_info["sigma_median"],
+                "sigma_std":gp_info["sigma_std"],
+                "log_sigma2_median":gp_info["log_sigma2_median"],
+                "log_sigma2_std":gp_info["log_sigma2_std"],
+                "m_median":gp_info["m_median"],
+                "m_std":gp_info["m_std"],
+                "b_median":gp_info["b_median"],
+                "b_std":gp_info["b_std"],
               "separation_btw_peaks": loc_gp-peak_loc} # check the separation between the peaks of the GP and the dip finder...
     
     if diagnostic:
@@ -379,10 +394,10 @@ def peak_detector(times, dips, power_thresh=3, peak_close_rmv=15, pk_2_pk_cut=30
     N_peaks (int): Number of peaks detected.
     dip_summary (dict): Summary of the dip. Including the peak location, the window start and end, the number of 1 sigma detections in the dip, the number of detections in the dip, the forward and backward duration of the dip, and the dip power.
     """
-    
-    # Smooth the deviation dips with a savgol filter
-    yht = savgol_filter(dips, 11, 8) # TODO: is this reccomended?
-    
+
+    #TODO: add smoothing savgol_filter again...
+    yht = dips
+
     # Scipy peak finding algorithm
     pks, _ = find_peaks(yht, height=power_thresh, distance=pk_2_pk_cut) #TODO: is 100 days peak separation too aggresive?
 
@@ -440,7 +455,6 @@ def best_peak_detector(peak_dictionary, min_in_dip=1):
     Returns:
     --------
     pd.DataFrame: Table of the best dip properties.
-    
     """
     # unpack dictionary
     N_peaks, dict_summary = peak_dictionary
@@ -477,7 +491,6 @@ def best_peak_detector(peak_dictionary, min_in_dip=1):
                     59449.52098]
 
     # Search in the table if none of these pair ranges exist; if so then remove 
-    # Initialize an empty list to store indices
     bad_loc_indices = []
 
     # Check if any pair of loc_lower and loc_upper intersects with the specified bounds
@@ -496,4 +509,4 @@ def best_peak_detector(peak_dictionary, min_in_dip=1):
     elif len(dip_table_q)==1:
         return dip_table 
     else:
-        return dip_table.iloc[dip_table[dip_table_q]['dip_power'].idxmax()]
+        return pd.DataFrame([list(dip_table.iloc[dip_table[dip_table_q]['dip_power'].idxmax()])], columns=['peak_loc', 'window_start', 'window_end', 'N_1sig_in_dip', 'N_in_dip', 'loc_forward_dur', 'loc_backward_dur', 'dip_power', 'average_dt_dif'])
