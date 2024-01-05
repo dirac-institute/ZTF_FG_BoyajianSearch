@@ -451,6 +451,43 @@ def best_peak_detector(peak_dictionary, min_in_dip=1):
 
     dip_table = pd.DataFrame(summary_matrix, columns=['peak_loc', 'window_start', 'window_end', 'N_1sig_in_dip', 'N_in_dip', 'loc_forward_dur', 'loc_backward_dur', 'dip_power', 'average_dt_dif'])
 
+    # From previous analysis we have found that the following locations are bad... please ignore such alias effect.
+    bad_loc_lower = [58248.52098,
+                    58261.52098,
+                    58448.52098,
+                    58576.52098,
+                    58834.52098,
+                    58854.52098,
+                    58855.52098,
+                    58879.02098,
+                    59266.02098,
+                    59301.52098,
+                    59448.52098]
+
+    bad_loc_upper = [58249.52098,
+                    58262.52098,
+                    58449.52098,
+                    58577.52098,
+                    58835.52098,
+                    58855.52098,
+                    58856.52098,
+                    58880.02098,
+                    59267.02098,
+                    59302.52098,
+                    59449.52098]
+
+    # Search in the table if none of these pair ranges exist; if so then remove 
+    # Initialize an empty list to store indices
+    bad_loc_indices = []
+
+    # Check if any pair of loc_lower and loc_upper intersects with the specified bounds
+    for i, (lower, upper) in enumerate(zip(bad_loc_lower, bad_loc_upper)):
+        condition = (dip_table['peak_loc'].between(lower, upper)) | (dip_table['peak_loc'].between(upper, lower))
+        if any(condition):
+            bad_loc_indices.extend(dip_table.index[condition].tolist())
+
+    dip_table = dip_table.drop(bad_loc_indices) # drop aliasing times
+
     dip_table_q = dip_table['N_in_dip'] >= min_in_dip # must contain at least one detection at the bottom
 
     if len(dip_table_q) == 0:
