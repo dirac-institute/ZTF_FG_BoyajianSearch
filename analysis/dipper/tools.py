@@ -65,6 +65,9 @@ def find_window_end(p_x, p_y, dif=1.86, atol=0.005):
     return window_end
     
 
+import numpy as np
+import pandas as pd
+
 def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q=None, custom_q=False):
     """
     Prepare the light curve for analysis - specifically for the ZTF data.
@@ -86,38 +89,68 @@ def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q
     mag_err (array-like): Output magnitude error values.
     """
     
+    # Convert input to numpy arrays if they are pandas Series
+    if isinstance(time, pd.core.series.Series):
+        time = time.values
+    if isinstance(mag, pd.core.series.Series):
+        mag = mag.values
+    if isinstance(mag_err, pd.core.series.Series):
+        mag_err = mag_err.values
+    if isinstance(flag, pd.core.series.Series):
+        flag = flag.values
+    if isinstance(band, pd.core.series.Series):
+        band = band.values
+    
     if custom_q:
         rmv = q
     else:
         # Selection and preparation of the light curve (default selection on )
-        rmv = (flag == flag_good) & (band==band_of_study)
+        rmv = (flag == flag_good) & (band==band_of_study) & (~np.isnan(time)) & (~np.isnan(mag)) & (~np.isnan(mag_err)) # remove nans!
     
     time, mag, mag_err = time[rmv], mag[rmv], mag_err[rmv]
     
     # sort time
-    srt = np.argsort(time)
+    srt = time.argsort()
 
-    return time[srt], mag[srt], mag_err[srt]
+    # Convert output back to pandas Series if the input was a Series
+    if isinstance(time, np.ndarray):
+        time = pd.Series(time)
+    if isinstance(mag, np.ndarray):
+        mag = pd.Series(mag)
+    if isinstance(mag_err, np.ndarray):
+        mag_err = pd.Series(mag_err)
+
+    return time.iloc[srt], mag.iloc[srt], mag_err.iloc[srt]
+
+import pandas as pd
 
 def fill_gaps(time, mag, mag_err, max_gap_days=90, num_points=20, window_size=0):
     """Fill the seasonal gaps of my data with synthetic observations based on the previous detections.
     
     Parameters:
     -----------
-    time (array-like): Input time values.
-    mag (array-like): Input magnitude values.
-    mag_err (array-like): Input magnitude error values.
+    time (array-like or pandas.core.series.Series): Input time values.
+    mag (array-like or pandas.core.series.Series): Input magnitude values.
+    mag_err (array-like or pandas.core.series.Series): Input magnitude error values.
     max_gap_days (float): Maximum gap size in days. Default is 90 days.
     num_points (int): Number of synthetic points to generate. Default is 20.
     window_size (int): Number of previous detections to use for the mean and standard deviation. Default is 10.
 
     Returns:
     --------
-    filled_time (array-like): Output time values.
-    filled_mag (array-like): Output magnitude values.
-    filled_mag_err (array-like): Output magnitude error values.
+    filled_time (array-like or pandas.core.series.Series): Output time values.
+    filled_mag (array-like or pandas.core.series.Series): Output magnitude values.
+    filled_mag_err (array-like or pandas.core.series.Series): Output magnitude error values.
 
     """
+    
+    # Convert input to numpy arrays if they are pandas Series
+    if isinstance(time, pd.core.series.Series):
+        time = time.values
+    if isinstance(mag, pd.core.series.Series):
+        mag = mag.values
+    if isinstance(mag_err, pd.core.series.Series):
+        mag_err = mag_err.values
     
     # Identify the indices where there are gaps greater than max_gap_days
     dts = np.diff(time)
@@ -152,8 +185,18 @@ def fill_gaps(time, mag, mag_err, max_gap_days=90, num_points=20, window_size=0)
         filled_mag = np.concatenate([filled_mag[:end_idx], synthetic_mag[mask] + np.random.normal(0, 0.2 * np.std(mag), np.sum(mask)), filled_mag[end_idx:]])
         filled_mag_err = np.concatenate([filled_mag_err[:end_idx], synthetic_mag_err[mask] + np.random.normal(0, 1*np.std(mag_err), np.sum(mask)), filled_mag_err[end_idx:]])
 
+    # Sort the filled data by time
     xs = np.argsort(filled_time)
-    return filled_time[xs], filled_mag[xs], filled_mag_err[xs]
+    
+    # Convert the filled data back to pandas Series if the input was pandas Series
+    if isinstance(time, pd.core.series.Series):
+        filled_time = pd.Series(filled_time[xs])
+    if isinstance(mag, pd.core.series.Series):
+        filled_mag = pd.Series(filled_mag[xs])
+    if isinstance(mag_err, pd.core.series.Series):
+        filled_mag_err = pd.Series(filled_mag_err[xs])
+    
+    return filled_time, filled_mag, filled_mag_err
 
 
 def digest_the_peak(peak_dict, time, mag, mag_err, expandby=0):
@@ -301,3 +344,16 @@ def quick_Gaussian_fit(time, running_deviation):
     fit_t = fitting.LevMarLSQFitter()
     t = fit_t(t_init, time, running_deviation, maxiter=2_000)
     return dict(amplitude=t.amplitude.value, mean=t.mean.value, stddev=t.stddev.value)
+
+def chidof(y):
+    """Calculate the chi-square dof under a constant model.
+    
+    Parameters:
+    -----------
+    y (array-like): Array of magnitudes.
+    """
+    Ndata = len(y)
+    M, S = np.median(y), np.std(sigma)
+    return 1/n * sum(((y-M)/(S))**2)
+
+

@@ -6,8 +6,7 @@ from george.modeling import Model as Model_George
 import emcee
 import numpy as np
 from multiprocessing import Pool
-
-
+from scipy.optimize import minimize
 
 class Model(Model_George):
     """Gaussian model.
@@ -48,6 +47,69 @@ class PolynomialModel(Model_George):
         t = t.flatten()
         return (t * self.m + self.b + 
                self.amp * np.exp(-0.5*(t-self.location)**2/(self.sigma**2) * np.exp(-self.log_sigma2)))
+
+
+def simple_GP(X, Y, YERR,  ell=10, Niter=1):
+
+    #TODO: what kernel and what scale length to choose?                        
+    gp = george.GP(np.var(Y) * kernels.Matern32Kernel(ell))
+    
+    gp.compute(X, YERR) 
+    init = gp.get_parameter_vector()
+
+    def neg_ln_like(p):
+        gp.set_parameter_vector(p)
+        return -gp.log_likelihood(Y)
+
+    def grad_neg_ln_like(p):
+        gp.set_parameter_vector(p)
+        return -gp.grad_log_likelihood(Y)
+        
+    for _ in range(Niter):
+        result = minimize(neg_ln_like, gp.get_parameter_vector(), jac=grad_neg_ln_like)
+        gp.set_parameter_vector(result.x)
+
+   
+    # model predictions
+    _x = np.linspace(min(X), max(X), 5_000)
+    y_pred, y_var = gp.predict(Y, _x, return_var=True)
+
+    return _x, y_pred, y_var, result
+
+
+def model_gp_minimize(X, Y, YERR, window_start, window_end, i0, ell=10):
+    """Calculate the Gaussian process on the observed data using scipy minimization and fitting a mean function."""
+    
+    kwargs = dict(**i0)
+    kwargs["bounds"] = dict(m=(-np.inf, +np.inf), 
+                                b=(-np.inf, +np.inf), 
+                                amp=(-np.inf, +np.inf), 
+                                location=(-np.inf, +np.inf), # adding boundaries to the location...
+                                sigma=(-np.inf, +np.inf),
+                                log_sigma2=(-np.inf, +np.inf)) 
+
+    mean_model = Model(**kwargs)
+                        
+    #TODO: what kernel and what scale length to choose?                        
+    gp = george.GP(np.var(Y) * kernels.Matern32Kernel(ell), mean=mean_model)
+    
+    gp.compute(X, YERR) 
+    init = gp.get_parameter_vector()
+
+    def neg_ln_like(p):
+        """Negative log-likelihood."""
+        gp.set_parameter_vector(p)
+        return -gp.log_likelihood(Y, quiet=True)
+
+    bnds = ((0, None), (0, None), (0, 5), (window_start, window_end), (1, 1000), (0, 10))
+    result = minimize(neg_ln_like, gp.get_parameter_vector(), bounds=bnds) # containts the fit information
+    gp.set_parameter_vector(result.x)
+
+    # model predictions
+    _x = np.linspace(min(X), max(X), 5_000)
+    y_pred, y_var = gp.predict(Y, _x, return_var=True)
+
+    return _x, y_pred, y_var, result
 
 
 def model_gp(X, Y, YERR, window_start, window_end, i0, ell=10):

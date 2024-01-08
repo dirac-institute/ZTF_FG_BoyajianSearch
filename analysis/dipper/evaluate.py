@@ -58,23 +58,8 @@ def evaluate(time, mag, mag_err, flag, band, ra, dec, custom_cols=column_names):
     # Peak detection summary per light curve
     peak_detections = peak_detector(time, running_deviation, power_thresh=3, peak_close_rmv=15, pk_2_pk_cut=30)
 
-    # Select best peak candidate with at least 3 points in the dip
-    bp = best_peak_detector(peak_detections, min_in_dip=3)
-
-    if bp is None or len(bp)==0:
-        bp = None
-    else:
-        # TODO: reject peaks that are too close to the edges of the light curve
-        try:
-            if bp['loc_forward_dur'].values[0]<2 or bp['loc_backward_dur'].values[0]<2:
-                bp = None
-        except:
-           if bp['loc_forward_dur']<2 or bp['loc_backward_dur']<2:
-                bp = None 
-
-    # If no peaks found...
-    if peak_detections[0]==0 or bp is None:
-        print ("No peaks found!")
+    if peak_detections[0]==0:
+        print ("REJECTING!")
         summary_['biweight_scale'] = S
 
         if len(running_deviation)==0:
@@ -115,8 +100,10 @@ def evaluate(time, mag, mag_err, flag, band, ra, dec, custom_cols=column_names):
         summary_['closest_star_arcsec'] = np.nan
         summary_['closest_star_mag'] = np.nan
         summary_['density_arcsec2'] = np.nan
-
     else: 
+        # Select best peak candidate with at least 3 points in the dip
+        bp = best_peak_detector(peak_detections, min_in_dip=3)
+
         # prepare the dip for the GP analysis...
         x, y, yerr = digest_the_peak(bp, time, mag, mag_err, expandby=15) # expand by 15 days is usually a good choice
 
@@ -127,14 +114,57 @@ def evaluate(time, mag, mag_err, flag, band, ra, dec, custom_cols=column_names):
             location=bp['peak_loc'],
             sigma=astropy_fit['stddev'], log_sigma2=np.log(0.4))
         
-        try:
-            we, ws = bp['window_end'].values[0], bp['window_start'].values[0]
-        except:
-            we, ws = bp['window_end'], bp['window_start']
+        #try:
+            #we, ws = bp['window_end'].values[0], bp['window_start'].values[0]
+        #except:
+        
+        we, ws = bp['window_end'], bp['window_start']
 
         gp =  model_gp(x, y, yerr, we, ws, init)
 
-        try:
+        if gp[0]==None:
+            summary_['biweight_scale'] = S
+
+            if len(running_deviation)==0:
+                summary_['frac_above_2_sigma'] = 0
+            else:
+                summary_['frac_above_2_sigma'] = len(running_deviation[running_deviation>np.mean(running_deviation)+2*np.std(running_deviation)])/len(running_deviation)
+            
+            summary_['Ndips'] = 0
+            summary_['rate'] = 0
+            summary_['best_dip_power'] = np.nan
+            summary_['best_dip_time_loc'] = np.nan
+            summary_['best_dip_start'] = np.nan
+            summary_['best_dip_end'] = np.nan
+            summary_['best_dip_dt'] = np.nan
+            summary_['best_dip_ndet'] = np.nan
+
+            # Gaussian Process metrics
+            summary_["best_dip_score"] = np.nan
+            summary_["left_error"] = np.nan
+            summary_["right_error"] = np.nan
+            summary_["log_sum_error"]=np.nan
+            summary_["logL_best_dip"]=np.nan
+            summary_["amp_median"]=np.nan
+            summary_["amp_std"]=np.nan
+            summary_["location_median"]=np.nan
+            summary_["location_std"]=np.nan
+            summary_["sigma_median"]=np.nan
+            summary_["sigma_std"]=np.nan
+            summary_["log_sigma2_median"]=np.nan
+            summary_["log_sigma2_std"]=np.nan
+            summary_["m_median"]=np.nan
+            summary_["m_std"]=np.nan
+            summary_["b_median"]=np.nan
+            summary_["b_std"]=np.nan
+
+            summary_['closest_bright_star_arcsec'] = np.nan
+            summary_['closest_bright_star_mag'] = np.nan
+            summary_['closest_star_arcsec'] = np.nan
+            summary_['closest_star_mag'] = np.nan
+            summary_['density_arcsec2'] = np.nan
+
+        else:
             # GP assesment of quality 
             gp_quality = evaluate_dip(gp, x, y, yerr, R, S, bp['peak_loc'], diagnostic=False)
 
@@ -178,44 +208,8 @@ def evaluate(time, mag, mag_err, flag, band, ra, dec, custom_cols=column_names):
             summary_['closest_star_mag'] = gaia_info['closest_star_mag']
             summary_['density_arcsec2'] = gaia_info['density_arcsec2']
 
-            return pd.Series(list(summary_.values()), index=custom_cols)
-        except:
-            print ("Issue with fitting")
-            summary_['biweight_scale'] = S
-            summary_['frac_above_2_sigma'] = len(running_deviation[running_deviation>np.mean(running_deviation)+2*np.std(running_deviation)])/len(running_deviation)
-            summary_['Ndips'] = 0
-            summary_['rate'] = 0
-            summary_['best_dip_power'] = np.nan
-            summary_['best_dip_time_loc'] = np.nan
-            summary_['best_dip_start'] = np.nan
-            summary_['best_dip_end'] = np.nan
-            summary_['best_dip_dt'] = np.nan
-            summary_['best_dip_ndet'] = np.nan
+    return pd.Series(list(summary_.values()), index=custom_cols)
 
-            # Gaussian Process metrics
-            summary_["best_dip_score"] = np.nan
-            summary_["left_error"] = np.nan
-            summary_["right_error"] = np.nan
-            summary_["log_sum_error"]=np.nan
-            summary_["logL_best_dip"]=np.nan
-            summary_["amp_median"]=np.nan
-            summary_["amp_std"]=np.nan
-            summary_["location_median"]=np.nan
-            summary_["location_std"]=np.nan
-            summary_["sigma_median"]=np.nan
-            summary_["sigma_std"]=np.nan
-            summary_["log_sigma2_median"]=np.nan
-            summary_["log_sigma2_std"]=np.nan
-            summary_["m_median"]=np.nan
-            summary_["m_std"]=np.nan
-            summary_["b_median"]=np.nan
-            summary_["b_std"]=np.nan
-
-            summary_['closest_bright_star_arcsec'] = np.nan
-            summary_['closest_bright_star_mag'] = np.nan
-            summary_['closest_star_arcsec'] = np.nan
-            summary_['closest_star_mag'] = np.nan
-            summary_['density_arcsec2'] = np.nan
 
 
 

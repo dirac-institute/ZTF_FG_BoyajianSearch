@@ -503,10 +503,13 @@ def best_peak_detector(peak_dictionary, min_in_dip=1):
 
     dip_table_q = dip_table['N_in_dip'] >= min_in_dip # must contain at least one detection at the bottom
 
-    if len(dip_table_q) == 0:
-        print ("No dip is found within the minimum number of detections.")
+    try:
+        if len(dip_table_q) == 0:
+            print ("No dip is found within the minimum number of detections.")
+            return None
+        elif len(dip_table_q)==1:
+            return dip_table 
+        else:
+            return pd.DataFrame([list(dip_table.iloc[dip_table[dip_table_q]['dip_power'].idxmax()])], columns=['peak_loc', 'window_start', 'window_end', 'N_1sig_in_dip', 'N_in_dip', 'loc_forward_dur', 'loc_backward_dur', 'dip_power', 'average_dt_dif'])
+    except:
         return None
-    elif len(dip_table_q)==1:
-        return dip_table 
-    else:
-        return pd.DataFrame([list(dip_table.iloc[dip_table[dip_table_q]['dip_power'].idxmax()])], columns=['peak_loc', 'window_start', 'window_end', 'N_1sig_in_dip', 'N_in_dip', 'loc_forward_dur', 'loc_backward_dur', 'dip_power', 'average_dt_dif'])
