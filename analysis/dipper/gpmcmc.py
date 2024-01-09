@@ -49,9 +49,23 @@ class PolynomialModel(Model_George):
                self.amp * np.exp(-0.5*(t-self.location)**2/(self.sigma**2) * np.exp(-self.log_sigma2)))
 
 
-def simple_GP(X, Y, YERR,  ell=10, Niter=1):
+def simple_GP(X, Y, YERR,  ell=10):
+    """Calculate a very fast and simple Gaussian process on the observed data using scipy minimization and fitting a mean function.
+    
+    Parameters
+    ----------
+    X : array_like
+        Time array.
+    Y : array_like
+        Magnitude array.
+    YERR : array_like
+        Magnitude error array.
+    ell : float
+        Scale length of the kernel.
 
-    #TODO: what kernel and what scale length to choose?                        
+    """""
+
+    #TODO: what kernel and what scale length to choose?                      
     gp = george.GP(np.var(Y) * kernels.Matern32Kernel(ell))
     
     gp.compute(X, YERR) 
@@ -64,17 +78,19 @@ def simple_GP(X, Y, YERR,  ell=10, Niter=1):
     def grad_neg_ln_like(p):
         gp.set_parameter_vector(p)
         return -gp.grad_log_likelihood(Y)
-        
-    for _ in range(Niter):
-        result = minimize(neg_ln_like, gp.get_parameter_vector(), jac=grad_neg_ln_like)
-        gp.set_parameter_vector(result.x)
+    
+    result = minimize(neg_ln_like, gp.get_parameter_vector(), jac=grad_neg_ln_like)
+    gp.set_parameter_vector(result.x)
 
-   
     # model predictions
     _x = np.linspace(min(X), max(X), 5_000)
     y_pred, y_var = gp.predict(Y, _x, return_var=True)
 
-    return _x, y_pred, y_var, result
+    # Predict simple chi-square
+    pred_on_data = gp.predict(Y, X, return_var=False)[0]
+    chi2_gp = 1/len(X) * np.sum((Y - pred_on_data)**2 / (YERR**2))
+
+    return _x, y_pred, y_var, result, chi2_gp
 
 
 def model_gp_minimize(X, Y, YERR, window_start, window_end, i0, ell=10):
@@ -109,7 +125,7 @@ def model_gp_minimize(X, Y, YERR, window_start, window_end, i0, ell=10):
     _x = np.linspace(min(X), max(X), 5_000)
     y_pred, y_var = gp.predict(Y, _x, return_var=True)
 
-    return _x, y_pred, y_var, result
+    return _x, y_pred, y_var, result, chi2_gp
 
 
 def model_gp(X, Y, YERR, window_start, window_end, i0, ell=10):

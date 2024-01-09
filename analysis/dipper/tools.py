@@ -5,10 +5,10 @@ import numpy as np
 from astropy.coordinates import SkyCoord
 import astropy.units as u
 from astropy.modeling.models import Gaussian1D
+import pandas as pd
 from astropy.modeling import fitting
 from astroquery.gaia import Gaia
-meta = Gaia.load_table('gaiadr3.gaia_source')
-
+from statsmodels.tsa import stattools
 
 def expandable_window(xdat, ydat, cent, atol=0.001):
     """ Calcualte the window size for a given peak. 
@@ -64,10 +64,6 @@ def find_window_end(p_x, p_y, dif=1.86, atol=0.005):
 
     return window_end
     
-
-import numpy as np
-import pandas as pd
-
 def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q=None, custom_q=False):
     """
     Prepare the light curve for analysis - specifically for the ZTF data.
@@ -121,8 +117,6 @@ def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q
         mag_err = pd.Series(mag_err)
 
     return time.iloc[srt], mag.iloc[srt], mag_err.iloc[srt]
-
-import pandas as pd
 
 def fill_gaps(time, mag, mag_err, max_gap_days=90, num_points=20, window_size=0):
     """Fill the seasonal gaps of my data with synthetic observations based on the previous detections.
@@ -223,7 +217,7 @@ def digest_the_peak(peak_dict, time, mag, mag_err, expandby=0):
     try:
         start, end = peak_dict['window_start'].values[0], peak_dict['window_end'].values[0]
     except:
-        start, end = peak_dict['window_start'], peak_dict['window_end']
+        start, end = min(time), max(time)
 
     # select
     selection = np.where((time > end-expandby) & (time < start+expandby) & (~np.isnan(time)) & (~np.isnan(mag)) & (~np.isnan(mag_err)))
@@ -231,6 +225,7 @@ def digest_the_peak(peak_dict, time, mag, mag_err, expandby=0):
     return time[selection], mag[selection], mag_err[selection]
 
 def estimate_gaiadr3_density_async(ra_target, dec_target, radius=0.01667):
+    """Do this assync to avoid timeouts."""
     query1 = f"""SELECT
                 ra, dec, parallax, phot_g_mean_mag,
                 DISTANCE(
@@ -287,9 +282,9 @@ def estimate_gaiadr3_density(ra_target, dec_target, gaia_lite_table, radius=0.01
     # Find the separation to the cloest star.
     sep_sorted = np.argsort(delta_sep) 
 
-    return {"closest_bright_star_arcsec": delta_sep[np.argmax(sky_table['phot_g_mean_mag'].values)],
+    return {"closest_bright_star_arcsec": delta_sep[np.argmax(sky_table['phot_g_mean_mag'].values)]/60/60,
         "closest_bright_star_mag": sky_table['phot_g_mean_mag'].values[np.argmin(sky_table['phot_g_mean_mag'].values)], 
-        "closest_star_arcsec": delta_sep[sep_sorted][0],
+        "closest_star_arcsec": delta_sep[sep_sorted][0]/60/60,
         "closest_star_mag": sky_table['phot_g_mean_mag'].values[sep_sorted][0],
         "density_arcsec2": len(delta_sep)/np.pi/radius**2}
 
@@ -352,8 +347,63 @@ def chidof(y):
     -----------
     y (array-like): Array of magnitudes.
     """
-    Ndata = len(y)
-    M, S = np.median(y), np.std(sigma)
-    return 1/n * sum(((y-M)/(S))**2)
+
+    if len(y)==0:
+        return np.nan
+    else:
+        Ndata = len(y)
+        M, S = np.median(y), np.std(y)
+        return 1/Ndata * sum(((y-M)/(S))**2)
+
+def adf_tests(y):
+    """Perform the ADF test on the light curve.
+    
+    Parameters:
+    -----------
+    y (array-like): Array of magnitudes.
+
+    Returns:
+    --------
+    Dictionary summarizing: 
+        ADF-const (float): ADF test statistic for constant model.
+        p-const (float): p-value for constant model.
+        ADF-const-trend (float): ADF test statistic for constant + trend model.
+        p-const-trend (float): p-value for constant + trend model.
+    """
+
+    if len(y) < 10 : # TODO: what is the minimum number of points to perform the test? Requires at least 10 detections for a regression...
+        return {"ADF-const": np.nan, "p-const":np.nan,
+                "ADF-const-trend": np.nan, "p-const-trend":np.nan}
+
+    else:
+
+        try: # sadly ADF sometimes won't work due to issues with LinearRegression fit.? #TODO: investigate
+            # Constant 
+            stat_1 = stattools.adfuller(y,
+                        maxlag=None, 
+                        regression='c', 
+                        autolag='AIC', 
+                        store=False,
+                        regresults=False)
+
+            # Constant + Trend
+            stat_2 = stattools.adfuller(y,
+                        maxlag=None, 
+                        regression='ct', 
+                        autolag='AIC', 
+                        store=False,
+                        regresults=False)
+
+            return {"ADF-const": stat_1[0], "p-const":stat_1[1], 
+                    "ADF-const-trend": stat_2[0], "p-const-trend":stat_2[1]}
+        except:
+            return {"ADF-const": np.nan, "p-const":np.nan,
+                    "ADF-const-trend": np.nan, "p-const-trend":np.nan}
+
+
+
+
+
+
 
 

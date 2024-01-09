@@ -271,7 +271,12 @@ def evaluate_dip(gp_model, x0, y0, yerr0, R, S, peak_loc, diagnostic=False):
     summary (dict): Summary of the dip. Including the assymetry score, the left and right integral errors, the log sum error, and the chi-square.
     """
     # unpack the Gaussian Process model
-    gpx, gpy, gpyerr, gp_info = gp_model
+    gpx, gpy, gpyerr, gp_info, chi_square = gp_model
+
+    if gp_info['success']: 
+        gp_status = 1
+    else: 
+        gp_status = 0
     
     # Find the peak of the GP curve
     #TODO: GP peak is causing issues withthe phase. Let keep it at the centroid of the window finder.
@@ -337,25 +342,13 @@ def evaluate_dip(gp_model, x0, y0, yerr0, R, S, peak_loc, diagnostic=False):
     IScore = calculate_assymetry_score(integral_left[0], integral_right[0], # left right integrals
                                         integral_left[1], integral_right[1]) # left right integral errors
 
-
     summary = {"assymetry_score": IScore, 
               "left_error": integral_left[1],
               "right_error": integral_right[1], 
-              "log_sum_error": np.log10(sum(_gpy/_gpyerr2**2)),
-              "log-like":gp_info["log-like"],
-                "amp_median":gp_info["amp_median"],
-                "amp_std":gp_info["amp_std"],
-                "location_median":gp_info["location_median"],
-                "location_std":gp_info["location_std"],
-                "sigma_median":gp_info["sigma_median"],
-                "sigma_std":gp_info["sigma_std"],
-                "log_sigma2_median":gp_info["log_sigma2_median"],
-                "log_sigma2_std":gp_info["log_sigma2_std"],
-                "m_median":gp_info["m_median"],
-                "m_std":gp_info["m_std"],
-                "b_median":gp_info["b_median"],
-                "b_std":gp_info["b_std"],
-              "separation_btw_peaks": loc_gp-peak_loc} # check the separation between the peaks of the GP and the dip finder...
+              "gp-fun": gp_info['fun'],
+              "gp_status": gp_status, # if status was a success or not
+              "chi-square-gp": chi_square,
+              "separation_btw_peaks": loc_gp-peak_loc.values[0]} # check the separation between the peaks of the GP and the dip finder...
     
     if diagnostic:
         #### Diagnotstics for fitting ####
@@ -394,6 +387,9 @@ def peak_detector(times, dips, power_thresh=3, peak_close_rmv=15, pk_2_pk_cut=30
     N_peaks (int): Number of peaks detected.
     dip_summary (dict): Summary of the dip. Including the peak location, the window start and end, the number of 1 sigma detections in the dip, the number of detections in the dip, the forward and backward duration of the dip, and the dip power.
     """
+
+    if len(dips)==0:
+        return None, None
 
     #TODO: add smoothing savgol_filter again...
     yht = dips
