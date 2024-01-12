@@ -101,7 +101,13 @@ def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q
         rmv = q
     else:
         # Selection and preparation of the light curve (default selection on )
-        rmv = (flag == flag_good) & (band==band_of_study) & (~np.isnan(time)) & (~np.isnan(mag)) & (~np.isnan(mag_err)) # remove nans!
+        rmv = (flag == flag_good) &\
+              (mag_err>0) &\ # in 2019 there were some issues in the mag_err column
+              ()
+             (band==band_of_study) &\
+                 (~np.isnan(time)) &\ 
+                 (~np.isnan(mag)) &\
+                     (~np.isnan(mag_err)) # remove nans!
     
     time, mag, mag_err = time[rmv], mag[rmv], mag_err[rmv]
     
@@ -116,7 +122,12 @@ def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q
     if isinstance(mag_err, np.ndarray):
         mag_err = pd.Series(mag_err)
 
-    return time.iloc[srt], mag.iloc[srt], mag_err.iloc[srt]
+    #TODO: check if it works
+    time, mag, mag_err = time.iloc[srt], mag.iloc[srt], mag_err.iloc[srt]
+    ts = abs(time - np.roll(time, 1)) > 1e-5
+
+    return time[ts], mag[ts], mag_err[ts]
+
 
 def fill_gaps(time, mag, mag_err, max_gap_days=90, num_points=20, window_size=0):
     """Fill the seasonal gaps of my data with synthetic observations based on the previous detections.
@@ -339,6 +350,21 @@ def quick_Gaussian_fit(time, running_deviation):
     fit_t = fitting.LevMarLSQFitter()
     t = fit_t(t_init, time, running_deviation, maxiter=2_000)
     return dict(amplitude=t.amplitude.value, mean=t.mean.value, stddev=t.stddev.value)
+
+def other_summary_stars(y): 
+    """Calculation of other random time series statistics.
+       Here is a list of all our evaluated features: 
+       - Skew
+       - Kurtosis
+       - Stetson J
+       - Stetson K
+       - Median Absolute Deviation
+    """
+    return None # TODO
+
+
+
+
 
 def chidof(y):
     """Calculate the chi-square dof under a constant model.
