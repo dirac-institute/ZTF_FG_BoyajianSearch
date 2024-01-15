@@ -103,7 +103,6 @@ def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q
         # Selection and preparation of the light curve (default selection on )
         rmv = (flag == flag_good) &\
               (mag_err>0) &\ # in 2019 there were some issues in the mag_err column
-              ()
              (band==band_of_study) &\
                  (~np.isnan(time)) &\ 
                  (~np.isnan(mag)) &\
