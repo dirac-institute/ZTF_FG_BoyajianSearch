@@ -501,7 +501,7 @@ def best_peak_detector(peak_dictionary, min_in_dip=1):
 
     try:
         if len(dip_table_q) == 0:
-            print ("No dip is found within the minimum number of detections.")
+            #print ("No dip is found within the minimum number of detections.")
             return None
         elif len(dip_table_q)==1:
             return dip_table 

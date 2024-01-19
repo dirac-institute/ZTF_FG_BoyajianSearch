@@ -34,7 +34,7 @@ column_names = [
 ]
 
 def evaluate(time, mag, mag_err, flag, band, ra, dec, custom_cols=column_names):
-    """Evaluate time series..."""
+    """Evaluate time series."""
 
     # Summary information
     summary_ = {}
@@ -43,7 +43,7 @@ def evaluate(time, mag, mag_err, flag, band, ra, dec, custom_cols=column_names):
     time, mag, mag_err = prepare_lc(time, mag, mag_err, flag, band,  band_of_study='r', flag_good=0, q=None, custom_q=False)
 
     # Fill in observational gaps...
-    time, mag, mag_err = fill_gaps(time, mag, mag_err, num_points=25, max_gap_days=95)
+    #time, mag, mag_err = fill_gaps(time, mag, mag_err, num_points=25, max_gap_days=95)
 
     # Evaluate biweight location and scale & other obvious statistics
     R, S = astro_stats.biweight.biweight_location(mag), astro_stats.biweight.biweight_scale(mag)

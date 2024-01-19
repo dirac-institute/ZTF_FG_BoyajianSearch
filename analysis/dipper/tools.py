@@ -9,6 +9,8 @@ import pandas as pd
 from astropy.modeling import fitting
 from astroquery.gaia import Gaia
 from statsmodels.tsa import stattools
+from scipy import stats
+from stetson import stetson_j, stetson_k
 
 def expandable_window(xdat, ydat, cent, atol=0.001):
     """ Calcualte the window size for a given peak. 
@@ -101,12 +103,7 @@ def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q
         rmv = q
     else:
         # Selection and preparation of the light curve (default selection on )
-        rmv = (flag == flag_good) &\
-              (mag_err>0) &\ # in 2019 there were some issues in the mag_err column
-             (band==band_of_study) &\
-                 (~np.isnan(time)) &\ 
-                 (~np.isnan(mag)) &\
-                     (~np.isnan(mag_err)) # remove nans!
+        rmv = (flag == flag_good) & (mag_err>0) & (band==band_of_study) & (~np.isnan(time)) & (~np.isnan(mag)) & (~np.isnan(mag_err)) # remove nans!
     
     time, mag, mag_err = time[rmv], mag[rmv], mag_err[rmv]
     
@@ -358,11 +355,24 @@ def other_summary_stars(y):
        - Stetson J
        - Stetson K
        - Median Absolute Deviation
+
+    Parameters:
+    -----------
+    y (array-like): Array of magnitudes.
     """
-    return None # TODO
-
-
-
+    try: 
+        return {"skew": stats.skew(y),
+         "kurtosis": stats.kurtosis(y), 
+         "stetson_j": stetson_j(y),
+          "stetson_k": stetson_k(y), 
+          "mad": stats.median_absolute_deviation(y)}
+    
+    except:
+        return {"skew": np.nan,
+         "kurtosis": np.nan, 
+         "stetson_j": np.nan,
+          "stetson_k": np.nan, 
+          "mad": np.nan}
 
 
 def chidof(y):
