@@ -52,9 +52,6 @@ def evaluate(time, mag, mag_err, flag, band, ra, dec, custom_cols=column_names):
     adf = adf_tests(mag) # ADF test for stationarity
     chi2dof = chidof(mag) # chi2dof
 
-    # Calculate other summary statistics
-    other_stats = other_summary_stats(time, mag, mag_err, len(mag),R, S)
-
     # Running deviation
     running_deviation = deviation(mag, mag_err, R, S)
 
@@ -64,6 +61,9 @@ def evaluate(time, mag, mag_err, flag, band, ra, dec, custom_cols=column_names):
     if peak_detections[0] > 0:
         # Select best peak candidate with at least 3 points in the dip
         bp = best_peak_detector(peak_detections, min_in_dip=3)
+
+        # Calculate other summary statistics
+        other_stats = other_summary_stats(time, mag, mag_err, len(mag),R, S)
     
     if peak_detections[0]==0 or len(time)==0:
 
