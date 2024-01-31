@@ -352,7 +352,51 @@ def quick_Gaussian_fit(time, running_deviation):
     t = fit_t(t_init, time, running_deviation, maxiter=2_000)
     return dict(amplitude=t.amplitude.value, mean=t.mean.value, stddev=t.stddev.value)
 
-def other_summary_stars(y): 
+
+def calc_Stetson(mag, err, N, wmean):
+    """Calculate the Welch/Stetson I and Stetson J,K statistics
+    e.g. https://www.aanda.org/articles/aa/pdf/2016/02/aa26733-15.pdf.
+    Source: https://github.com/ZwickyTransientFacility/scope/blob/5a67134ab2cf41d0aab2c1b8920f63a67b48362e/tools/featureGeneration/lcstats.py#L69
+    """
+    d = np.sqrt(1.0 * N / (N - 1)) * (mag - wmean) / err
+    P = d[:-1] * d[1:]
+
+    # stetsonI
+    stetsonI = np.sum(P)
+
+    # stetsonJ
+    stetsonJ = np.sum(np.sign(P) * np.sqrt(np.abs(P)))
+
+    # stetsonK
+    stetsonK = np.sum(abs(d)) / N
+    stetsonK /= np.sqrt(1.0 / N * np.sum(d**2))
+
+    return stetsonI, stetsonJ, stetsonK
+
+
+def calc_invNeumann(t, mag, wstd):
+    """Calculate the time-weighted inverse Von Neumann stat.
+        Source: https://github.com/ZwickyTransientFacility/scope/blob/5a67134ab2cf41d0aab2c1b8920f63a67b48362e/tools/featureGeneration/lcstats.py#L69
+    """
+    dt = t[1:] - t[:-1]
+    dm = mag[1:] - mag[:-1]
+
+    w = (dt) ** -2  # inverse deltat weighted
+    eta = np.sum(w * dm**2)
+    eta /= np.sum(w) * wstd**2
+
+    return eta**-1
+
+
+def calc_NormExcessVar(mag, err, N, wmean):
+    """    Source: https://github.com/ZwickyTransientFacility/scope/blob/5a67134ab2cf41d0aab2c1b8920f63a67b48362e/tools/featureGeneration/lcstats.py#L69
+    """
+    stat = np.sum((mag - wmean) ** 2 - err**2)
+    stat /= N * wmean**2
+    return stat
+
+
+def other_summary_stars(y, yerr, N, wmean): 
     """Calculation of other random time series statistics.
        Here is a list of all our evaluated features: 
        - Skew
@@ -370,14 +414,22 @@ def other_summary_stars(y):
          "kurtosis": stats.kurtosis(y), 
          "stetson_j": stetson_j(y),
           "stetson_k": stetson_k(y), 
-          "mad": stats.median_absolute_deviation(y)}
+          "mad": stats.median_absolute_deviation(y),
+          "Stetson_I": calc_Stetson(y, yerr, N, wmean)[0],
+          "Stetson_J": calc_Stetson(y, yerr, N, wmean)[1],
+          "Stetson_K": calc_Stetson(y, yerr, N, wmean)[2],
+          "invNeumann": calc_invNeumann(y, yerr, N, wmean)}
     
     except:
         return {"skew": np.nan,
          "kurtosis": np.nan, 
          "stetson_j": np.nan,
           "stetson_k": np.nan, 
-          "mad": np.nan}
+          "mad": np.nan,
+          "Stetson_I": np.nan,
+          "Stetson_J": np.nan,
+          "Stetson_K": np.nan,
+          "invNeumann": np.nan}
 
 
 def chidof(y):
