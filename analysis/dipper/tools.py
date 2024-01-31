@@ -104,12 +104,8 @@ def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q
     else:
         # Selection and preparation of the light curve (default selection on )
         rmv = (flag == flag_good) & (mag_err>0) & (band==band_of_study) & (~np.isnan(time)) & (~np.isnan(mag)) & (~np.isnan(mag_err)) # remove nans!
-    
-    time, mag, mag_err = time[rmv], mag[rmv], mag_err[rmv]
 
-    # Remove observations that are <1 day apart
-    cut_close_time = np.where(np.diff(time) < 1)[0] + 1
-    time, mag, mag_err  = np.delete(time, cut_close_time), np.delete(mag, cut_close_time), np.delete(mag_err, cut_close_time)
+    time, mag, mag_err = time[rmv], mag[rmv], mag_err[rmv]
 
     # sort time
     srt = time.argsort()
@@ -126,8 +122,14 @@ def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q
     # remove repetitive time values
     time, mag, mag_err = time.iloc[srt], mag.iloc[srt], mag_err.iloc[srt]
     ts = abs(time - np.roll(time, 1)) > 1e-5
+        
+    time, mag, mag_err = time[ts], mag[ts], mag_err[ts]
 
-    return time[ts], mag[ts], mag_err[ts]
+    # Remove observations that are <1 day apart
+    cut_close_time = np.where(np.diff(time) < 0.5)[0] + 1
+    time, mag, mag_err  = np.delete(time, cut_close_time), np.delete(mag, cut_close_time), np.delete(mag_err, cut_close_time)
+
+    return time, mag, mag_err
 
 
 def fill_gaps(time, mag, mag_err, max_gap_days=90, num_points=20, window_size=0):
@@ -396,7 +398,7 @@ def calc_NormExcessVar(mag, err, N, wmean):
     return stat
 
 
-def other_summary_stars(y, yerr, N, wmean): 
+def other_summary_stats(x, y, yerr, N, wmean, wstd): 
     """Calculation of other random time series statistics.
        Here is a list of all our evaluated features: 
        - Skew
@@ -409,27 +411,23 @@ def other_summary_stars(y, yerr, N, wmean):
     -----------
     y (array-like): Array of magnitudes.
     """
-    try: 
+
+    try:
         return {"skew": stats.skew(y),
-         "kurtosis": stats.kurtosis(y), 
-         "stetson_j": stetson_j(y),
-          "stetson_k": stetson_k(y), 
-          "mad": stats.median_absolute_deviation(y),
-          "Stetson_I": calc_Stetson(y, yerr, N, wmean)[0],
-          "Stetson_J": calc_Stetson(y, yerr, N, wmean)[1],
-          "Stetson_K": calc_Stetson(y, yerr, N, wmean)[2],
-          "invNeumann": calc_invNeumann(y, yerr, N, wmean)}
-    
+            "kurtosis": stats.kurtosis(y), 
+            "mad": stats.median_abs_deviation(y),
+            "stetson_I": calc_Stetson(y, yerr, N, wmean)[0],
+            "stetson_J": calc_Stetson(y, yerr, N, wmean)[1],
+            "stetson_K": calc_Stetson(y, yerr, N, wmean)[2],
+            "invNeumann": calc_invNeumann(x, y, wstd)}
     except:
         return {"skew": np.nan,
-         "kurtosis": np.nan, 
-         "stetson_j": np.nan,
-          "stetson_k": np.nan, 
-          "mad": np.nan,
-          "Stetson_I": np.nan,
-          "Stetson_J": np.nan,
-          "Stetson_K": np.nan,
-          "invNeumann": np.nan}
+            "kurtosis": np.nan, 
+            "mad": np.nan,
+            "stetson_I": np.nan,
+            "stetson_J": np.nan,
+            "stetson_K": np.nan,
+            "invNeumann": np.nan}
 
 
 def chidof(y):

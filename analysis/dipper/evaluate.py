@@ -3,8 +3,7 @@ from tools import *
 import astropy.stats as astro_stats
 from gpmcmc import *
 
-column_names = [
-    'biweight_scale',
+column_names = ['biweight_scale',
     'frac_above_2_sigma',
     'Ndips',
     'rate',
@@ -13,6 +12,13 @@ column_names = [
     'ADF_const_trend',
     'ADF_pval_const',
     'ADF_pval_const_trend',
+    'skew', 
+    'kurtosis',
+    'mad',
+    'stetson_i',
+    'stetson_j',
+    'stetson_k',
+    'invNeumann',
     'best_dip_power',
     'best_dip_time_loc',
     'best_dip_start',
@@ -30,8 +36,7 @@ column_names = [
     'closest_bright_star_mag',
     'closest_star_arcsec',
     'closest_star_mag',
-    'density_arcsec2'
-]
+    'density_arcsec2']
 
 def evaluate(time, mag, mag_err, flag, band, ra, dec, custom_cols=column_names):
     """Evaluate time series."""
@@ -42,13 +47,13 @@ def evaluate(time, mag, mag_err, flag, band, ra, dec, custom_cols=column_names):
     # Digest my light curve. Select band, good detections & sort
     time, mag, mag_err = prepare_lc(time, mag, mag_err, flag, band,  band_of_study='r', flag_good=0, q=None, custom_q=False)
 
-    # Fill in observational gaps...
-    #time, mag, mag_err = fill_gaps(time, mag, mag_err, num_points=25, max_gap_days=95)
-
     # Evaluate biweight location and scale & other obvious statistics
     R, S = astro_stats.biweight.biweight_location(mag), astro_stats.biweight.biweight_scale(mag)
     adf = adf_tests(mag) # ADF test for stationarity
     chi2dof = chidof(mag) # chi2dof
+
+    # Calculate other summary statistics
+    other_stats = other_summary_stats(time, mag, mag_err, len(mag),R, S)
 
     # Running deviation
     running_deviation = deviation(mag, mag_err, R, S)
@@ -76,9 +81,17 @@ def evaluate(time, mag, mag_err, flag, band, ra, dec, custom_cols=column_names):
         summary_['ADF_const_trend'] = adf['ADF-const-trend']
         summary_['ADF_pval_const'] = adf['p-const']
         summary_['ADF_pval_const_trend'] = adf['p-const-trend']
+        summary_['skew'] = other_stats['skew']
+        summary_['kurtosis'] = other_stats['kurtosis']
+        summary_['mad'] = other_stats['mad']
+        summary_['stetson_i'] = other_stats['stetson_I']
+        summary_['stetson_j'] = other_stats['stetson_J']
+        summary_['stetson_k'] = other_stats['stetson_K']
+        summary_['invNeumann'] = other_stats['invNeumann']
+
 
         # If failing; set all values to NaN
-        for col in custom_cols[9::]:
+        for col in custom_cols[16::]:
             summary_[col] = np.nan
     else: 
         # prepare the dip for the GP analysis... expand by 15 days should be fine...
@@ -103,6 +116,13 @@ def evaluate(time, mag, mag_err, flag, band, ra, dec, custom_cols=column_names):
             summary_['ADF_const_trend'] = adf['ADF-const-trend']
             summary_['ADF_pval_const'] = adf['p-const']
             summary_['ADF_pval_const_trend'] = adf['p-const-trend']
+            summary_['skew'] = other_stats['skew']
+            summary_['kurtosis'] = other_stats['kurtosis']
+            summary_['mad'] = other_stats['mad']
+            summary_['stetson_i'] = other_stats['stetson_I']
+            summary_['stetson_j'] = other_stats['stetson_J']
+            summary_['stetson_k'] = other_stats['stetson_K']
+            summary_['invNeumann'] = other_stats['invNeumann']
 
             summary_['best_dip_power'] = bp['dip_power'].values[0]
             summary_['best_dip_time_loc'] = bp['peak_loc'].values[0]
@@ -142,9 +162,16 @@ def evaluate(time, mag, mag_err, flag, band, ra, dec, custom_cols=column_names):
             summary_['ADF_const_trend'] = adf['ADF-const-trend']
             summary_['ADF_pval_const'] = adf['p-const']
             summary_['ADF_pval_const_trend'] = adf['p-const-trend']
+            summary_['skew'] = other_stats['skew']
+            summary_['kurtosis'] = other_stats['kurtosis']
+            summary_['mad'] = other_stats['mad']
+            summary_['stetson_i'] = other_stats['stetson_I']
+            summary_['stetson_j'] = other_stats['stetson_J']
+            summary_['stetson_k'] = other_stats['stetson_K']
+            summary_['invNeumann'] = other_stats['invNeumann']
 
             # If failing; set all values to NaN
-            for col in custom_cols[9::]:
+            for col in custom_cols[16::]:
                 summary_[col] = np.nan
 
 
