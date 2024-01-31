@@ -106,7 +106,11 @@ def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q
         rmv = (flag == flag_good) & (mag_err>0) & (band==band_of_study) & (~np.isnan(time)) & (~np.isnan(mag)) & (~np.isnan(mag_err)) # remove nans!
     
     time, mag, mag_err = time[rmv], mag[rmv], mag_err[rmv]
-    
+
+    # Remove observations that are <1 day apart
+    cut_close_time = np.where(np.diff(time) < 1)[0] + 1
+    time, mag, mag_err  = np.delete(time, cut_close_time), np.delete(mag, cut_close_time), np.delete(mag_err, cut_close_time)
+
     # sort time
     srt = time.argsort()
 
@@ -119,6 +123,7 @@ def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q
         mag_err = pd.Series(mag_err)
 
     #TODO: check if it works
+    # remove repetitive time values
     time, mag, mag_err = time.iloc[srt], mag.iloc[srt], mag_err.iloc[srt]
     ts = abs(time - np.roll(time, 1)) > 1e-5
 
