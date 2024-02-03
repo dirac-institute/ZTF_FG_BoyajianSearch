@@ -86,18 +86,8 @@ def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q
     mag (array-like): Output magnitude values.
     mag_err (array-like): Output magnitude error values.
     """
-    
-    # Convert input to numpy arrays if they are pandas Series
-    if isinstance(time, pd.core.series.Series):
-        time = time.values
-    if isinstance(mag, pd.core.series.Series):
-        mag = mag.values
-    if isinstance(mag_err, pd.core.series.Series):
-        mag_err = mag_err.values
-    if isinstance(flag, pd.core.series.Series):
-        flag = flag.values
-    if isinstance(band, pd.core.series.Series):
-        band = band.values
+
+    # TODO: remove all pandas series issues.
     
     if custom_q:
         rmv = q
@@ -109,14 +99,6 @@ def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q
 
     # sort time
     srt = time.argsort()
-
-    # Convert output back to pandas Series if the input was a Series
-    if isinstance(time, np.ndarray):
-        time = pd.Series(time)
-    if isinstance(mag, np.ndarray):
-        mag = pd.Series(mag)
-    if isinstance(mag_err, np.ndarray):
-        mag_err = pd.Series(mag_err)
 
     #TODO: check if it works
     # remove repetitive time values
@@ -151,14 +133,6 @@ def fill_gaps(time, mag, mag_err, max_gap_days=90, num_points=20, window_size=0)
     filled_mag_err (array-like or pandas.core.series.Series): Output magnitude error values.
 
     """
-    
-    # Convert input to numpy arrays if they are pandas Series
-    if isinstance(time, pd.core.series.Series):
-        time = time.values
-    if isinstance(mag, pd.core.series.Series):
-        mag = mag.values
-    if isinstance(mag_err, pd.core.series.Series):
-        mag_err = mag_err.values
     
     # Identify the indices where there are gaps greater than max_gap_days
     dts = np.diff(time)
