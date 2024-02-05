@@ -57,13 +57,13 @@ def evaluate(time, mag, mag_err, flag, band, ra, dec, custom_cols=column_names):
 
     # Peak detection summary per light curve
     peak_detections = peak_detector(time, running_deviation, power_thresh=3, peak_close_rmv=15, pk_2_pk_cut=30)
+
+     # Calculate other summary statistics
+    other_stats = other_summary_stats(time, mag, mag_err, len(mag), R, S)
     
     if peak_detections[0] > 0:
         # Select best peak candidate with at least 3 points in the dip
         bp = best_peak_detector(peak_detections, min_in_dip=3)
-
-        # Calculate other summary statistics
-        other_stats = other_summary_stats(time, mag, mag_err, len(mag),R, S)
     
     if peak_detections[0]==0 or len(time)==0:
 

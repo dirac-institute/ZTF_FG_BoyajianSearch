@@ -11,6 +11,9 @@ from astroquery.gaia import Gaia
 from statsmodels.tsa import stattools
 from scipy import stats
 from stetson import stetson_j, stetson_k
+import os
+
+bad_times = np.load('../../dipper/' + "bad_times.npy")
 
 def expandable_window(xdat, ydat, cent, atol=0.001):
     """ Calcualte the window size for a given peak. 
@@ -66,7 +69,7 @@ def find_window_end(p_x, p_y, dif=1.86, atol=0.005):
 
     return window_end
     
-def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q=None, custom_q=False):
+def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q=None, custom_q=False, bad_times=bad_times):
     """
     Prepare the light curve for analysis - specifically for the ZTF data.
     
@@ -86,9 +89,6 @@ def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q
     mag (array-like): Output magnitude values.
     mag_err (array-like): Output magnitude error values.
     """
-
-    # TODO: remove all pandas series issues.
-    
     if custom_q:
         rmv = q
     else:
@@ -100,16 +100,21 @@ def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q
     # sort time
     srt = time.argsort()
 
-    #TODO: check if it works
-    # remove repetitive time values
-    time, mag, mag_err = time.iloc[srt], mag.iloc[srt], mag_err.iloc[srt]
+    # TODO: innvestigate effects
+    time, mag, mag_err = time[srt], mag[srt], mag_err[srt]
     ts = abs(time - np.roll(time, 1)) > 1e-5
         
     time, mag, mag_err = time[ts], mag[ts], mag_err[ts]
 
+    #TODO: investigate effects
     # Remove observations that are <1 day apart
     cut_close_time = np.where(np.diff(time) < 0.5)[0] + 1
     time, mag, mag_err  = np.delete(time, cut_close_time), np.delete(mag, cut_close_time), np.delete(mag_err, cut_close_time)
+
+    #TODO: investigate effects
+    # Remove the bad masked times! 
+    bads = np.logical_not(np.any((time.reshape(-1,1) > bad_times[:,0]) & (time.reshape(-1,1) < bad_times[:,1]), axis=1))
+    time, mag, mag_err = time[bads], mag[bads], mag_err[bads]
 
     return time, mag, mag_err
 

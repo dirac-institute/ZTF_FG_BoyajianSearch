@@ -387,57 +387,59 @@ def peak_detector(times, dips, power_thresh=3, peak_close_rmv=15, pk_2_pk_cut=30
     N_peaks (int): Number of peaks detected.
     dip_summary (dict): Summary of the dip. Including the peak location, the window start and end, the number of 1 sigma detections in the dip, the number of detections in the dip, the forward and backward duration of the dip, and the dip power.
     """
+    try:
+        if len(dips)==0:
+            return 0, 0
 
-    if len(dips)==0:
-        return None, None
+        #TODO: add smoothing savgol_filter again...
+        yht = dips
 
-    #TODO: add smoothing savgol_filter again...
-    yht = dips
+        # Scipy peak finding algorithm
+        pks, _ = find_peaks(yht, height=power_thresh, distance=pk_2_pk_cut) #TODO: is 100 days peak separation too aggresive?
 
-    # Scipy peak finding algorithm
-    pks, _ = find_peaks(yht, height=power_thresh, distance=pk_2_pk_cut) #TODO: is 100 days peak separation too aggresive?
-
-    # Reverse sort the peak values
-    pks = np.sort(pks)[::-1]
-    
-    # Time of peaks and dev of peaks
-    t_pks, p_pks = times[pks], dips[pks]
-    
-    # TODO: this section is likely not needed because scipy peak finder is good enough?
-    # If we have more than one peak, remove peaks that are too close to each other?
-    #if len(pks)>1:
-    #    # remove peaks that are too close to each other
-    #    t_pks = np.array([t_pks[i] for i in range(-1, len(t_pks)-1) if ~np.isclose(t_pks[i],
-    #                                                                         t_pks[i+1],
-    #                                                                         atol=peak_close_rmv)]) # 5 day tolerance window...
-
-    #    p_pks = np.array([p_pks[i] for i in range(-1, len(t_pks)-1) if ~np.isclose(t_pks[i],
-    #                                                                        t_pks[i+1],
-    #                                                                        atol=peak_close_rmv)])
-    #    srt = np.argsort(t_pks) # argsort the t_pks
-    #
-    #    t_pks, p_pks = t_pks[srt], p_pks[srt] # rename variables...
-    
-    # Number of peaks
-    N_peaks = len(t_pks)
-    
-    dip_summary = {}
-    for i, (time_ppk, ppk) in enumerate(zip(t_pks, p_pks)):
-        _edges = calc_dip_edges(times, dips, time_ppk, atol=0.2)
+        # Reverse sort the peak values
+        pks = np.sort(pks)[::-1]
         
-        dip_summary[f'dip_{i}'] = {
-            "peak_loc": time_ppk,
-            'window_start': _edges[0],
-            'window_end': _edges[1],
-            "N_1sig_in_dip": _edges[-3], # number of 1 sigma detections in the dip
-            "N_in_dip": _edges[-2], # number of detections in the dip
-            'loc_forward_dur': _edges[2],
-            "loc_backward_dur": _edges[3],
-            "dip_power":ppk,
-            "average_dt_dif": _edges[-1]
-        }
-                
-    return N_peaks, dip_summary
+        # Time of peaks and dev of peaks
+        t_pks, p_pks = times[pks], dips[pks]
+        
+        # TODO: this section is likely not needed because scipy peak finder is good enough?
+        # If we have more than one peak, remove peaks that are too close to each other?
+        #if len(pks)>1:
+        #    # remove peaks that are too close to each other
+        #    t_pks = np.array([t_pks[i] for i in range(-1, len(t_pks)-1) if ~np.isclose(t_pks[i],
+        #                                                                         t_pks[i+1],
+        #                                                                         atol=peak_close_rmv)]) # 5 day tolerance window...
+
+        #    p_pks = np.array([p_pks[i] for i in range(-1, len(t_pks)-1) if ~np.isclose(t_pks[i],
+        #                                                                        t_pks[i+1],
+        #                                                                        atol=peak_close_rmv)])
+        #    srt = np.argsort(t_pks) # argsort the t_pks
+        #
+        #    t_pks, p_pks = t_pks[srt], p_pks[srt] # rename variables...
+        
+        # Number of peaks
+        N_peaks = len(t_pks)
+        
+        dip_summary = {}
+        for i, (time_ppk, ppk) in enumerate(zip(t_pks, p_pks)):
+            _edges = calc_dip_edges(times, dips, time_ppk, atol=0.2)
+            
+            dip_summary[f'dip_{i}'] = {
+                "peak_loc": time_ppk,
+                'window_start': _edges[0],
+                'window_end': _edges[1],
+                "N_1sig_in_dip": _edges[-3], # number of 1 sigma detections in the dip
+                "N_in_dip": _edges[-2], # number of detections in the dip
+                'loc_forward_dur': _edges[2],
+                "loc_backward_dur": _edges[3],
+                "dip_power":ppk,
+                "average_dt_dif": _edges[-1]
+            }
+                    
+        return N_peaks, dip_summary
+    except:
+        return 0, 0
 
 
 def best_peak_detector(peak_dictionary, min_in_dip=1):
