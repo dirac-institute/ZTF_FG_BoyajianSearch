@@ -52,6 +52,59 @@ def deviation(mag, mag_err, R, S):
     # Calculate biweight estimators
     return (mag - R) / np.sqrt(mag_err**2 + S**2)  
 
+
+def detect_bursts_edges(time, mag, center_time, baseline_mean, baseline_std, burst_threshold=3.0, expansion_indices=1):
+    """
+    Detect bursts in a time series using linear interpolation. powered by GPT. 
+
+    Parameters:
+    -----------
+    time (array-like): Time values of the light curve.
+    mag (array-like): Magnitude values of the light curve.
+    center_time (float): Center time of the burst.
+    baseline_mean (float): Mean of the baseline.
+    baseline_std (float): Standard deviation of the baseline.
+    burst_threshold (float): Threshold for burst detection. Default is 3.0.
+    expansion_indices (int): Number of indices to expand the burst region. Default is 1.
+
+    Returns:
+    --------
+    burst_start (float): Start time of the burst.
+    burst_end (float): End time of the burst.
+    """
+
+    # Define a linear interpolation function
+    interpolate_flux = np.interp
+
+    # Initialize burst_start and burst_end
+    burst_start = burst_end = np.searchsorted(time, center_time)
+
+    # Find burst start
+    while burst_start > 0:
+        burst_start -= 1
+        if mag[burst_start] < baseline_mean + burst_threshold * baseline_std:
+            break
+
+    # Find burst end
+    while burst_end < len(time) - 1:
+        burst_end += 1
+        if mag[burst_end] < baseline_mean + burst_threshold * baseline_std:
+            break
+
+    # Expand burst region towards the beginning
+    burst_start = max(0, burst_start - expansion_indices)
+
+    # Expand burst region towards the end
+    burst_end = min(len(time) - 1, burst_end + expansion_indices)
+
+    # Final start and end
+    t_start, t_end = time[burst_start], time[burst_end]
+
+    # How many detections above 2std above the mean?
+    N_thresh_1 = len((mag[(time>t_start) & (time<t_end)]>baseline_mean + 2*baseline_std))
+
+    return t_start, t_end, abs(t_start-center_time), abs(t_end-center_time), N_thresh_1, 0, 0
+
 def calc_dip_edges(xx, yy, _cent, atol=1e-32):
     """ Calculate the edges of a dip given the center dip time. 
 
@@ -423,14 +476,17 @@ def peak_detector(times, dips, power_thresh=3, peak_close_rmv=15, pk_2_pk_cut=30
         
         dip_summary = {}
         for i, (time_ppk, ppk) in enumerate(zip(t_pks, p_pks)):
-            _edges = calc_dip_edges(times, dips, time_ppk, atol=0.2)
+            #TODO: old version
+            #_edges = calc_dip_edges(times, dips, time_ppk, atol=0.2)
+            _edges = detect_bursts_edges(times, dips, time_ppk, np.mean(dips), np.std(dips), burst_threshold=3.0, expansion_indices=1)
+            # t_start, t_end, abs(t_start-center_time), abs(t_end-center_time), N_thresh_1, 0, 0 : above. #TODO: remove this!
             
             dip_summary[f'dip_{i}'] = {
                 "peak_loc": time_ppk,
                 'window_start': _edges[0],
                 'window_end': _edges[1],
                 "N_1sig_in_dip": _edges[-3], # number of 1 sigma detections in the dip
-                "N_in_dip": _edges[-2], # number of detections in the dip
+                "N_in_dip": _edges[-3], # number of detections in the dip
                 'loc_forward_dur': _edges[2],
                 "loc_backward_dur": _edges[3],
                 "dip_power":ppk,
