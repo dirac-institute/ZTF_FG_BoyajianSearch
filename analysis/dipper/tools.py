@@ -107,7 +107,7 @@ def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q
     time, mag, mag_err = time[ts], mag[ts], mag_err[ts]
 
     #TODO: investigate effects
-    # Remove observations that are <1 day apart
+    # Remove observations that are <0.5 day apart
     cut_close_time = np.where(np.diff(time) < 0.5)[0] + 1
     time, mag, mag_err  = np.delete(time, cut_close_time), np.delete(mag, cut_close_time), np.delete(mag_err, cut_close_time)
 

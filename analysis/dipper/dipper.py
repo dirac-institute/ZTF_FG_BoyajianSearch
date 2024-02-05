@@ -463,6 +463,7 @@ def best_peak_detector(peak_dictionary, min_in_dip=1):
 
     dip_table = pd.DataFrame(summary_matrix, columns=['peak_loc', 'window_start', 'window_end', 'N_1sig_in_dip', 'N_in_dip', 'loc_forward_dur', 'loc_backward_dur', 'dip_power', 'average_dt_dif'])
 
+    #TODO: we can remove this eventually...
     # From previous analysis we have found that the following locations are bad... please ignore such alias effect.
     bad_loc_lower = [58248.52098,
                     58261.52098,
