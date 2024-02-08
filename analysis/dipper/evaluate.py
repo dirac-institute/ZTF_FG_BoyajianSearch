@@ -118,7 +118,8 @@ def evaluate(time_cat, mag_cat, mag_err_cat, flag_cat, band_cat, ra_cat, dec_cat
                 g_validate = True
                 out_g = (np.mean(yg)-np.mean(running_deviation_g))/(np.std(running_deviation_g))
 
-            print (out_g, np.mean(running_deviation_g), np.mean(yg))
+            #print (out_g, np.mean(running_deviation_g), np.mean(yg))
+            #print (bp)
             #TODO: check if 1.5 sigma is okay for now...
             if g_validate and out_g >1.5:
                 #TODO: this step might be unnecessary...
