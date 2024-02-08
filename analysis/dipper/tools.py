@@ -212,8 +212,8 @@ def digest_the_peak(peak_dict, time, mag, mag_err, expandby=0):
     except:
         start, end = min(time), max(time)
 
-    # select
-    selection = np.where((time > end-expandby) & (time < start+expandby) & (~np.isnan(time)) & (~np.isnan(mag)) & (~np.isnan(mag_err)))
+    # select from start to end
+    selection = np.where((time > start-expandby) & (time < end+expandby) & (~np.isnan(time)) & (~np.isnan(mag)) & (~np.isnan(mag_err)))
 
     return time[selection], mag[selection], mag_err[selection]
 
