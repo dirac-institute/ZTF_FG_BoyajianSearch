@@ -89,34 +89,37 @@ def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q
     mag (array-like): Output magnitude values.
     mag_err (array-like): Output magnitude error values.
     """
-    if custom_q:
-        rmv = q
-    else:
-        # Selection and preparation of the light curve (default selection on )
-        rmv = (flag == flag_good) & (mag_err>0) & (band==band_of_study) & (~np.isnan(time)) & (~np.isnan(mag)) & (~np.isnan(mag_err)) # remove nans!
+    try:
+        if custom_q:
+            rmv = q
+        else:
+            # Selection and preparation of the light curve (default selection on )
+            rmv = (flag == flag_good) & (mag_err>0) & (band==band_of_study) & (~np.isnan(time)) & (~np.isnan(mag)) & (~np.isnan(mag_err)) # remove nans!
 
-    time, mag, mag_err = time[rmv], mag[rmv], mag_err[rmv]
+        time, mag, mag_err = time[rmv], mag[rmv], mag_err[rmv]
 
-    # sort time
-    srt = time.argsort()
+        # sort time
+        srt = time.argsort()
 
-    # TODO: innvestigate effects
-    time, mag, mag_err = time[srt], mag[srt], mag_err[srt]
-    ts = abs(time - np.roll(time, 1)) > 1e-5
-        
-    time, mag, mag_err = time[ts], mag[ts], mag_err[ts]
+        # TODO: innvestigate effects
+        time, mag, mag_err = time[srt], mag[srt], mag_err[srt]
+        ts = abs(time - np.roll(time, 1)) > 1e-5
+            
+        time, mag, mag_err = time[ts], mag[ts], mag_err[ts]
 
-    #TODO: investigate effects
-    # Remove observations that are <0.5 day apart
-    cut_close_time = np.where(np.diff(time) < 0.5)[0] + 1
-    time, mag, mag_err  = np.delete(time, cut_close_time), np.delete(mag, cut_close_time), np.delete(mag_err, cut_close_time)
+        #TODO: investigate effects
+        # Remove observations that are <0.5 day apart
+        cut_close_time = np.where(np.diff(time) < 0.5)[0] + 1
+        time, mag, mag_err  = np.delete(time, cut_close_time), np.delete(mag, cut_close_time), np.delete(mag_err, cut_close_time)
 
-    #TODO: investigate effects
-    # Remove the bad masked times! 
-    bads = np.logical_not(np.any((time.reshape(-1,1) > bad_times[:,0]) & (time.reshape(-1,1) < bad_times[:,1]), axis=1))
-    time, mag, mag_err = time[bads], mag[bads], mag_err[bads]
+        #TODO: investigate effects
+        # Remove the bad masked times! 
+        bads = np.logical_not(np.any((time.reshape(-1,1) > bad_times[:,0]) & (time.reshape(-1,1) < bad_times[:,1]), axis=1))
+        time, mag, mag_err = time[bads], mag[bads], mag_err[bads]
 
-    return time, mag, mag_err
+        return time, mag, mag_err
+    except:
+        return np.array([0]), np.array([0]), np.array([0])
 
 
 def fill_gaps(time, mag, mag_err, max_gap_days=90, num_points=20, window_size=0):
@@ -203,14 +206,21 @@ def digest_the_peak(peak_dict, time, mag, mag_err, expandby=0):
     mag (array-like): Output magnitude values.
     mag_err (array-like): Output magnitude error values.
     """
-
     # Define starting pontnts
     # TODO: make sure correct order
+    try:
+        Ns = len(time)
+    except:
+        return [0], [0], [0]
 
     try:
         start, end = peak_dict['window_start'].values[0], peak_dict['window_end'].values[0]
     except:
-        start, end = min(time), max(time)
+        try:
+            Ns = len(time)
+            start, end = min(time), max(time)
+        except:
+            return [0], [0], [0]
 
     # select from start to end
     selection = np.where((time > start-expandby) & (time < end+expandby) & (~np.isnan(time)) & (~np.isnan(mag)) & (~np.isnan(mag_err)))

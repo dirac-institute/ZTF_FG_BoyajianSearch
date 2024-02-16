@@ -132,7 +132,7 @@ def evaluate(time_cat, mag_cat, mag_err_cat, flag_cat, band_cat, ra_cat, dec_cat
                 except: # if GP fails for some reason...
                     gp = [None, None, None]
 
-                if gp[0] is not None:
+                if (gp[0] is not None) and (x[0] > 0):
                     # GP assesment of quality 
                     gp_quality = evaluate_dip(gp, x, y, yerr, R, S, bp['peak_loc'], diagnostic=False)
 
