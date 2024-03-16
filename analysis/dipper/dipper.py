@@ -456,21 +456,6 @@ def peak_detector(times, dips, power_thresh=3, peak_close_rmv=15, pk_2_pk_cut=30
         # Time of peaks and dev of peaks
         t_pks, p_pks = times[pks], dips[pks]
         
-        # TODO: this section is likely not needed because scipy peak finder is good enough?
-        # If we have more than one peak, remove peaks that are too close to each other?
-        #if len(pks)>1:
-        #    # remove peaks that are too close to each other
-        #    t_pks = np.array([t_pks[i] for i in range(-1, len(t_pks)-1) if ~np.isclose(t_pks[i],
-        #                                                                         t_pks[i+1],
-        #                                                                         atol=peak_close_rmv)]) # 5 day tolerance window...
-
-        #    p_pks = np.array([p_pks[i] for i in range(-1, len(t_pks)-1) if ~np.isclose(t_pks[i],
-        #                                                                        t_pks[i+1],
-        #                                                                        atol=peak_close_rmv)])
-        #    srt = np.argsort(t_pks) # argsort the t_pks
-        #
-        #    t_pks, p_pks = t_pks[srt], p_pks[srt] # rename variables...
-        
         # Number of peaks
         N_peaks = len(t_pks)
         
