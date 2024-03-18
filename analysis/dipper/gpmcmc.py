@@ -7,6 +7,8 @@ import emcee
 import numpy as np
 from multiprocessing import Pool
 from scipy.optimize import minimize
+from scipy.interpolate import interp1d
+
 
 class Model(Model_George):
     """Gaussian model.
@@ -24,6 +26,44 @@ class Model(Model_George):
     def get_value(self, t): 
         return self.amp * np.exp(-0.5*(t.flatten()-self.location)**2/(self.sigma**2) * np.exp(-self.log_sigma2))
 
+def simple_linear_interp(X, Y, YERR):
+    """Calculate linear interpolation on the observed data.
+    
+    Parameters
+    ----------
+    X : array_like
+        Time array.
+    Y : array_like
+        Magnitude array.
+    YERR : array_like
+        Magnitude error array.
+
+    Returns
+    -------
+    _x : array_like
+        Time array for predictions.
+    y_pred : array_like
+        Predicted magnitudes.
+    y_var : array_like
+        Variance of predictions.
+    chi2_interp : float
+        Chi-square value of the interpolation.
+    """
+    # Linear interpolation
+    f = interp1d(X, Y, kind='linear')
+
+    # Generate predictions
+    _x = np.linspace(min(X), max(X), 5000)
+    y_pred = f(_x)
+
+    # Variance estimation - Assuming constant variance
+    y_var = np.full_like(_x, np.var(Y))
+
+    # Chi-square calculation
+    pred_on_data = f(X)
+    chi2_interp = 1 / len(X) * np.sum((Y - pred_on_data)**2 / (YERR**2))
+
+    return _x, y_pred, y_var, {'success':1, 'fun':0}, chi2_interp
 
 class PolynomialModel(Model_George): 
     """Polynomial model: linear function plus Gassian.

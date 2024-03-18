@@ -214,8 +214,9 @@ def digest_the_peak(peak_dict, time, mag, mag_err, expandby=0):
         return [0], [0], [0]
 
     try:
-        start, end = peak_dict['window_start'].values[0], peak_dict['window_end'].values[0]
+        start, end = peak_dict['window_start'], peak_dict['window_end']
     except:
+        print ("failing")
         try:
             Ns = len(time)
             start, end = min(time), max(time)

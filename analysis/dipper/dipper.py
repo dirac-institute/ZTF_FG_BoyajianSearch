@@ -401,7 +401,7 @@ def evaluate_dip(gp_model, x0, y0, yerr0, R, S, peak_loc, diagnostic=False):
               "gp-fun": gp_info['fun'],
               "gp_status": gp_status, # if status was a success or not
               "chi-square-gp": chi_square,
-              "separation_btw_peaks": loc_gp-peak_loc.values[0]} # check the separation between the peaks of the GP and the dip finder...
+              "separation_btw_peaks": loc_gp-peak_loc} # check the separation between the peaks of the GP and the dip finder...
     
     if diagnostic:
         #### Diagnotstics for fitting ####
