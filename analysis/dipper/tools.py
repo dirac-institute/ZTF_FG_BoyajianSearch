@@ -18,7 +18,7 @@ from stetson import stetson_j, stetson_k
 import os
 from scipy.optimize import curve_fit
 
-bad_times = np.load('../../dipper/' + "bad_times.npy")
+bad_times = np.load('/astro/users/atzanida/Desktop/research/ZTF_FG_BoyajianSearch/analysis/dipper/' + "bad_times.npy")
 
 def expandable_window(xdat, ydat, cent, atol=0.001):
     """ Calcualte the window size for a given peak. 
