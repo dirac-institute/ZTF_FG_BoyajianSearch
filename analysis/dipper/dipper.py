@@ -4,6 +4,10 @@ Dipper detection algorithm developed in https://github.com/AndyTza/little-dip
 
 
 import numpy as np
+np.seterr(divide='ignore', invalid='ignore')
+import warnings
+warnings.filterwarnings('ignore')
+
 #Gaussian process modules
 from george import kernels
 import george
@@ -125,11 +129,11 @@ def calc_dip_edges(xx, yy, _cent, atol=1e-32):
     t_in_window (float): Average time difference in the given window.
     """
     
-    indices_forward = np.where((xx > _cent) & np.isclose(yy, np.mean(yy) - 0.5*np.std(yy), atol=atol))[0]
+    indices_forward = np.where((xx > _cent) & np.isclose(yy, np.nanmean(yy) - 0.5*np.nanstd(yy), atol=atol))[0]
     t_forward = xx[indices_forward[0]] if indices_forward.size > 0 else 0
     
     # select indicies close to the center (negative)
-    indices_back = np.where((xx < _cent) & np.isclose(yy, np.mean(yy) - 0.5*np.std(yy), atol=atol))[0]
+    indices_back = np.where((xx < _cent) & np.isclose(yy, np.nanmean(yy) - 0.5*np.nanstd(yy), atol=atol))[0]
     if indices_back.size > 0:
         t_back = xx[indices_back[-1]]
     else:
@@ -145,7 +149,7 @@ def calc_dip_edges(xx, yy, _cent, atol=1e-32):
     # How many detections above the median thresh in the given window?
     _window_ = (xx>t_back) & (xx<t_forward)
 
-    sel_1_sig = (yy[_window_]>np.median(yy) + 1*np.std(yy)) # detections above 1 sigma
+    sel_1_sig = (yy[_window_]>np.nanmedian(yy) + 1*np.nanstd(yy)) # detections above 1 sigma
     N_thresh_1 = len((yy[_window_])[sel_1_sig])
     N_in_dip = len((yy[_window_]))
 
@@ -179,7 +183,7 @@ def GaussianProcess_dip(x, y, yerr, length_scale=0.01, error_penalty=0.5):
     y = f(x)
 
     # Penalize my errors for 
-    if np.mean(yerr) * 100 > 1:
+    if np.nanmean(yerr) * 100 > 1:
         yerr = yerr * error_penalty
 
     kernel = 1 * RBF(length_scale=length_scale, length_scale_bounds=(1e-3, 1e3))
@@ -417,7 +421,7 @@ def evaluate_dip(gp_model, x0, y0, yerr0, R, S, peak_loc, diagnostic=False):
         plt.axvline(loc_gp, color='k', ls='--')
         plt.ylim(plt.ylim()[::-1])
         plt.errorbar(x0, y0, yerr0, color='k', fmt='.')
-        plt.axhline(np.mean(y0), color='green', lw=2)
+        plt.axhline(np.nanmean(y0), color='green', lw=2)
         plt.fill_between(_gpx, _gpy-np.sqrt(_gpyerr), _gpy+np.sqrt(_gpyerr), alpha=0.4)
         plt.title(f"{summary}, and logsum-err: {np.log10(sum(_gpy/(_gpyerr)))}")
         
@@ -463,7 +467,7 @@ def peak_detector(times, dips, power_thresh=3, peak_close_rmv=15, pk_2_pk_cut=30
         for i, (time_ppk, ppk) in enumerate(zip(t_pks, p_pks)):
             #TODO: old version
             #_edges = calc_dip_edges(times, dips, time_ppk, atol=0.2)
-            _edges = detect_bursts_edges(times, dips, time_ppk, np.mean(dips), np.std(dips), burst_threshold=3.0, expansion_indices=1)
+            _edges = detect_bursts_edges(times, dips, time_ppk, np.nanmean(dips), np.nanstd(dips), burst_threshold=3.0, expansion_indices=1)
             # t_start, t_end, abs(t_start-center_time), abs(t_end-center_time), N_thresh_1, 0, 0 : above. #TODO: remove this!
             
             dip_summary[f'dip_{i}'] = {

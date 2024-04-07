@@ -2,6 +2,10 @@
 Tools for analysis.
 """
 import numpy as np
+np.seterr(divide='ignore', invalid='ignore')
+import warnings
+warnings.filterwarnings('ignore')
+
 from astropy.coordinates import SkyCoord
 import astropy.units as u
 from astropy.modeling.models import Gaussian1D
@@ -12,6 +16,7 @@ from statsmodels.tsa import stattools
 from scipy import stats
 from stetson import stetson_j, stetson_k
 import os
+from scipy.optimize import curve_fit
 
 bad_times = np.load('../../dipper/' + "bad_times.npy")
 
@@ -113,9 +118,10 @@ def prepare_lc(time, mag, mag_err, flag, band, band_of_study='r', flag_good=0, q
         time, mag, mag_err  = np.delete(time, cut_close_time), np.delete(mag, cut_close_time), np.delete(mag_err, cut_close_time)
 
         #TODO: investigate effects
+        # TODO: we found that this was leading to misleading scores.. Overall we want to find the systematic spikes that are inflating the scores...
         # Remove the bad masked times! 
-        bads = np.logical_not(np.any((time.reshape(-1,1) > bad_times[:,0]) & (time.reshape(-1,1) < bad_times[:,1]), axis=1))
-        time, mag, mag_err = time[bads], mag[bads], mag_err[bads]
+        #bads = np.logical_not(np.any((time.reshape(-1,1) > bad_times[:,0]) & (time.reshape(-1,1) < bad_times[:,1]), axis=1))
+        #time, mag, mag_err = time[bads], mag[bads], mag_err[bads]
 
         return time, mag, mag_err
     except:
@@ -155,25 +161,25 @@ def fill_gaps(time, mag, mag_err, max_gap_days=90, num_points=20, window_size=0)
         end_idx = i + 1
 
         # Calculate median from the last 5 and next 5 detections
-        last5_median = np.median(mag[max(0, start_idx - 5):start_idx])
-        next5_median = np.median(mag[end_idx:end_idx + 5])
+        last5_median = np.nanmedian(mag[max(0, start_idx - 5):start_idx])
+        next5_median = np.nanmedian(mag[end_idx:end_idx + 5])
         mean_mag = np.linspace(last5_median, next5_median, num_points)
         
         # Calculate standard deviation from the last 5 and next 5 detections
-        last5_std = np.std(mag[max(0, start_idx - 5):start_idx])
-        next5_std = np.std(mag[end_idx:end_idx + 5])
+        last5_std = np.nanstd(mag[max(0, start_idx - 5):start_idx])
+        next5_std = np.nanstd(mag[end_idx:end_idx + 5])
         std_mag = np.linspace(last5_std, next5_std, num_points)
 
         # Generate synthetic points within the gap
         synthetic_time = np.linspace(time[start_idx]+10, time[end_idx], num_points)
         synthetic_mag = np.random.normal(loc=mean_mag, scale=std_mag)
-        synthetic_mag_err = np.random.normal(loc=np.mean(mag_err), scale=np.std(mag_err), size=num_points)
+        synthetic_mag_err = np.random.normal(loc=np.nanmean(mag_err), scale=np.nanstd(mag_err), size=num_points)
 
         # Add additional modification without overlapping old data
         mask = (synthetic_time >= time[start_idx]) & (synthetic_time <= time[end_idx])
         filled_time = np.concatenate([filled_time[:end_idx], synthetic_time[mask], filled_time[end_idx:]])
-        filled_mag = np.concatenate([filled_mag[:end_idx], synthetic_mag[mask] + np.random.normal(0, 0.2 * np.std(mag), np.sum(mask)), filled_mag[end_idx:]])
-        filled_mag_err = np.concatenate([filled_mag_err[:end_idx], synthetic_mag_err[mask] + np.random.normal(0, 1*np.std(mag_err), np.sum(mask)), filled_mag_err[end_idx:]])
+        filled_mag = np.concatenate([filled_mag[:end_idx], synthetic_mag[mask] + np.random.normal(0, 0.2 * np.nanstd(mag), np.sum(mask)), filled_mag[end_idx:]])
+        filled_mag_err = np.concatenate([filled_mag_err[:end_idx], synthetic_mag_err[mask] + np.random.normal(0, 1*np.nanstd(mag_err), np.sum(mask)), filled_mag_err[end_idx:]])
 
     # Sort the filled data by time
     xs = np.argsort(filled_time)
@@ -211,22 +217,23 @@ def digest_the_peak(peak_dict, time, mag, mag_err, expandby=0):
     try:
         Ns = len(time)
     except:
-        return [0], [0], [0]
+        return np.array([0]), np.array([0]), np.array([0])
 
     try:
-        start, end = peak_dict['window_start'], peak_dict['window_end']
+        start, end = peak_dict['window_start'].values[0], peak_dict['window_end'].values[0]
     except:
-        print ("failing")
         try:
             Ns = len(time)
             start, end = min(time), max(time)
         except:
-            return [0], [0], [0]
+            return np.array([0]), np.array([0]), np.array([0])
+    
+    if (start==0) or (end==0):
+        return np.array([0]), np.array([0]), np.array([0])
+    else:
+        selection = np.where((time > start-expandby) & (time < end+expandby) & (~np.isnan(time)) & (~np.isnan(mag)) & (~np.isnan(mag_err)))
 
-    # select from start to end
-    selection = np.where((time > start-expandby) & (time < end+expandby) & (~np.isnan(time)) & (~np.isnan(mag)) & (~np.isnan(mag_err)))
-
-    return time[selection], mag[selection], mag_err[selection]
+        return time[selection], mag[selection], mag_err[selection]
 
 def estimate_gaiadr3_density_async(ra_target, dec_target, radius=0.01667):
     """Do this assync to avoid timeouts."""
@@ -317,7 +324,7 @@ def bin_counter(xdat, ydat, bin_width=3):
     for i in range(len(bin_centroid)):
         bin_indices = np.where((xdat > bin_edges[i]) & (xdat < bin_edges[i+1]))
         y_values = ydat[bin_indices]
-        median = np.median(y_values)
+        median = np.nanmedian(y_values)
         running_median.append(median)
     
     return bin_centroid, value_count, running_median
@@ -432,7 +439,7 @@ def chidof(y):
         return np.nan
     else:
         Ndata = len(y)
-        M, S = np.median(y), np.std(y)
+        M, S = np.nanmedian(y), np.nanstd(y)
         return 1/Ndata * sum(((y-M)/(S))**2)
 
 def adf_tests(y):
@@ -480,7 +487,48 @@ def adf_tests(y):
             return {"ADF-const": np.nan, "p-const":np.nan,
                     "ADF-const-trend": np.nan, "p-const-trend":np.nan}
 
+# TODO: finish writing docs
+def gaus(x, a, x0, sigma, ofs):
+    """"Calculate a simple Gaussian function with a term offset"""
+    return a*np.exp(-(x-x0)**2/(2*sigma**2)) + ofs
 
+def auto_fit(x, y, loc, base, return_model=False):
+    """Perform a Gaussian function auto fitting with some lose priors."""
+    try:
+        popt, pcov = curve_fit(gaus, 
+                                x,
+                                y,
+                                p0=[1, loc, 1, base],
+                            bounds=((0.1, loc-5, 0.1, base-2),
+                                    (np.inf, loc+5, np.inf, base+2)))
+    except: # if fails return zeros...
+        popt, pcov = [0, 0, 0, 0], [0, 0, 0, 0]
+    
+    if return_model:
+        return gaus(x, *popt)
+    else:
+        return popt
+
+def fwhm_calc(pop):
+    """Add parameters recovered"""
+    return 2.355 * pop[2] # fwhm 
+
+def calc_sum_score(xdat, ydat, peak_dict, base, rms):
+    """Calculate score"""
+    score_term = 0
+    for i in range(peak_dict[0]):
+        event = peak_dict[1][f'dip_{i}']
+        loc = event['peak_loc']
+        powr = event['dip_power']
+        Ndet = event['N_1sig_in_dip']
+        
+        fit_temrs = auto_fit(xdat, ydat,
+                             loc, base, return_model=False)
+        fwhm = fwhm_calc(fit_temrs)
+        
+        score_term += fwhm * powr * Ndet
+        
+    return (1/(peak_dict[0])) * (1/rms) * score_term
 
 
 
